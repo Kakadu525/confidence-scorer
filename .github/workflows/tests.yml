@@ -1,0 +1,74 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Установить пакет и dev-зависимости
+        run: pip install -e ".[dev]"
+
+      - name: Установить JS-хелперы
+        run: npm install --omit=dev --no-audit --no-fund
+        working-directory: confidence_scorer/js_helpers
+
+      - name: Тесты
+        run: pytest -q --cov=confidence_scorer --cov-report=term-missing --cov-report=xml
+
+      - name: Проверить, что js_helpers попадают в сборку
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install build
+          python -m build --wheel -o dist_check
+          python - <<'PY'
+          import glob, sys, zipfile
+          wheel = glob.glob("dist_check/*.whl")[0]
+          names = zipfile.ZipFile(wheel).namelist()
+          missing = [
+              f
+              for f in ("extract.js", "diff_worker.js", "spec_to_arbitrary.js", "package.json")
+              if f"confidence_scorer/js_helpers/{f}" not in names
+          ]
+          if missing:
+              sys.exit(f"В wheel отсутствуют файлы js_helpers: {missing}")
+          print("js_helpers упакованы полностью")
+          PY
+
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install "ruff>=0.6"
+      - run: ruff check confidence_scorer tests

@@ -1,0 +1,46 @@
+name: Confidence Score comment
+
+on:
+  workflow_run:
+    workflows: ["Confidence Score"]
+    types: [completed]
+
+permissions:
+  actions: read
+  pull-requests: write
+
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: confidence-report
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('report.md') || !fs.existsSync('pr-number.txt')) {
+              core.info('Отчёта нет, комментарий не публикуется.');
+              return;
+            }
+            const raw = fs.readFileSync('pr-number.txt', 'utf8').trim();
+            if (!/^[0-9]+$/.test(raw)) {
+              core.setFailed(`Некорректный номер PR в артефакте: ${JSON.stringify(raw)}`);
+              return;
+            }
+            const issue_number = Number(raw);
+            const body = fs.readFileSync('report.md', 'utf8').slice(0, 65000);
+            const marker = '<!-- confidence-scorer:report -->';
+            const { owner, repo } = context.repo;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
