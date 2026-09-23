@@ -1,0 +1,4 @@
+include LICENSE
+include README.md
+recursive-include confidence_scorer/js_helpers *.js *.json
+recursive-exclude confidence_scorer/js_helpers/node_modules *
