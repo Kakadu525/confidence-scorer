@@ -9,10 +9,10 @@ branding:
 inputs:
   python-version:
     description: "Версия Python для установки confidence-scorer"
-    default: "3.11"
+    default: "3.12"
   node-version:
     description: "Версия Node.js для JS/TS property-тестов"
-    default: "20"
+    default: "24"
   base-ref:
     description: "Базовый ref для сравнения (по умолчанию base ветки PR)"
     default: ""
@@ -22,6 +22,9 @@ inputs:
   fail-under:
     description: "Переопределить порог thresholds.fail_below из конфига"
     default: ""
+  fail-on-gate:
+    description: "Падать, если сработал merge gate. С \"false\" Action только сообщает результат в outputs score, verdict и gate"
+    default: "true"
   post-comment:
     description: "Публиковать/обновлять комментарий с отчётом в PR"
     default: "true"
@@ -51,6 +54,9 @@ outputs:
   verdict:
     description: "pass | warn | manual | fail | hard_fail | unknown"
     value: ${{ steps.run.outputs.verdict }}
+  gate:
+    description: "passed | failed: сработал ли merge gate"
+    value: ${{ steps.run.outputs.gate }}
 
 runs:
   using: "composite"
@@ -63,13 +69,14 @@ runs:
           exit 1
         fi
 
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: ${{ inputs.python-version }}
 
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@v7
       with:
         node-version: ${{ inputs.node-version }}
+        package-manager-cache: false
 
     - name: Установить confidence-scorer
       shell: bash
@@ -87,16 +94,17 @@ runs:
           ROOT="$(dirname "$ROOT")"
         done
 
-        if [ -n "$PKG_ROOT" ]; then
-          echo "Устанавливаю confidence-scorer из исходников: $PKG_ROOT"
-          pip install "$PKG_ROOT"
-        else
-          echo "Исходники рядом с action не найдены, ставлю опубликованный пакет"
-          pip install confidence-scorer
+        if [ -z "$PKG_ROOT" ]; then
+          echo "::error::Не найден pyproject.toml confidence-scorer рядом с action ($ACTION_PATH)."
+          exit 1
         fi
+        pip install "$PKG_ROOT"
 
     - name: Установить зависимости JS-хелперов (для JS/TS property-тестов)
       shell: bash
+      env:
+        PYTHONUTF8: "1"
+        PYTHONIOENCODING: utf-8
       run: |
         set -euo pipefail
         PKG_DIR=$(python -c "import confidence_scorer, os; print(os.path.dirname(confidence_scorer.__file__))")
@@ -113,14 +121,19 @@ runs:
       env:
         INPUT_BASE_REF: ${{ inputs.base-ref }}
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PUSH_BEFORE_SHA: ${{ github.event.before }}
       run: |
         set -euo pipefail
         if [ -n "$INPUT_BASE_REF" ]; then
           REF="$INPUT_BASE_REF"
         elif [ -n "$PR_BASE_SHA" ]; then
           REF="$PR_BASE_SHA"
-        else
+        elif [ -n "$PUSH_BEFORE_SHA" ] && git cat-file -e "$PUSH_BEFORE_SHA^{commit}" 2>/dev/null; then
+          REF="$PUSH_BEFORE_SHA"
+        elif git rev-parse -q --verify "HEAD~1^{commit}" >/dev/null; then
           REF="HEAD~1"
+        else
+          REF=""
         fi
         printf 'ref=%s\n' "$REF" >> "$GITHUB_OUTPUT"
 
@@ -137,15 +150,27 @@ runs:
         HEAD_SHA: ${{ github.sha }}
         CONFIG_PATH: ${{ inputs.config-path }}
         FAIL_UNDER: ${{ inputs.fail-under }}
+        PYTHONUTF8: "1"
+        PYTHONIOENCODING: utf-8
       run: |
         set -uo pipefail
+        if [ -z "$BASE_REF" ]; then
+          echo "::notice::Не с чем сравнивать: у коммита нет родителя. Проверка пропущена."
+          {
+            echo "score="
+            echo "verdict=unknown"
+            echo "exit_code=0"
+            echo "gate=passed"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
         ARGS=(--base "$BASE_REF" --head "$HEAD_SHA"
               --json-out score.json --markdown-out report.md --format terminal)
         if [ -n "$CONFIG_PATH" ]; then ARGS+=(--config "$CONFIG_PATH"); fi
         if [ -n "$FAIL_UNDER" ]; then ARGS+=(--fail-under "$FAIL_UNDER"); fi
 
-        confidence-score run "${ARGS[@]}"
-        RUN_EXIT=$?
+        RUN_EXIT=0
+        confidence-score run "${ARGS[@]}" || RUN_EXIT=$?
 
         if [ ! -f score.json ]; then
           echo "::error::confidence-score завершился с кодом $RUN_EXIT и не создал score.json, смотрите вывод шага выше."
@@ -157,10 +182,12 @@ runs:
         printf 'score=%s\n' "$SCORE" >> "$GITHUB_OUTPUT"
         printf 'verdict=%s\n' "$VERDICT" >> "$GITHUB_OUTPUT"
         printf 'exit_code=%s\n' "$RUN_EXIT" >> "$GITHUB_OUTPUT"
+        if [ "$RUN_EXIT" -eq 0 ]; then GATE=passed; else GATE=failed; fi
+        printf 'gate=%s\n' "$GATE" >> "$GITHUB_OUTPUT"
 
     - name: Опубликовать/обновить комментарий в PR
       if: ${{ inputs.post-comment == 'true' && github.event.pull_request }}
-      uses: actions/github-script@v7
+      uses: actions/github-script@v9
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -169,32 +196,38 @@ runs:
             core.warning('report.md не создан, комментарий в PR не публикуется.');
             return;
           }
-          const body = fs.readFileSync('report.md', 'utf8');
+          const body = fs.readFileSync('report.md', 'utf8').slice(0, 65000);
           const marker = '<!-- confidence-scorer:report -->';
-          const { data: comments } = await github.rest.issues.listComments({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: context.issue.number,
-          });
-          const existing = comments.find((c) => c.body && c.body.includes(marker));
-          if (existing) {
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: existing.id,
-              body,
-            });
-          } else {
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body,
-            });
+          const { owner, repo } = context.repo;
+          const issue_number = context.issue.number;
+          try {
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+          } catch (error) {
+            if (error.status === 403 || error.status === 404) {
+              core.warning(
+                'Нет прав на комментарий в PR (так бывает в PR из форков). ' +
+                'Используйте post-comment: "false" и workflow confidence-comment.yml из README confidence-scorer.'
+              );
+            } else {
+              throw error;
+            }
           }
 
     - name: Применить merge gate
       shell: bash
       env:
         RUN_EXIT_CODE: ${{ steps.run.outputs.exit_code }}
-      run: exit "${RUN_EXIT_CODE:-1}"
+        FAIL_ON_GATE: ${{ inputs.fail-on-gate }}
+      run: |
+        CODE="${RUN_EXIT_CODE:-1}"
+        if [ "$CODE" != "0" ] && [ "$FAIL_ON_GATE" = "false" ]; then
+          echo "::warning::Merge gate сработал, но fail-on-gate: false, поэтому шаг не падает."
+          exit 0
+        fi
+        exit "$CODE"

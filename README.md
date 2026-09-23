@@ -480,7 +480,7 @@ jobs:
   score:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # обязательно: без полной истории не сравнить base...head
 
@@ -496,7 +496,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: printf '%s\n' "$PR_NUMBER" > pr-number.txt
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: confidence-report
@@ -520,6 +520,9 @@ workflow: уберите `post-comment: "false"` и шаги с артефакт
 `openrouter-api-key`, `deepseek-api-key`, `dashscope-api-key`. Action
 выставляет outputs `score` и `verdict` и падает, если сработал merge gate,
 поэтому его можно сделать обязательной проверкой (required status check).
+Ещё есть output `gate` (`passed` или `failed`). Outputs доступны и после
+падения Action, в шагах с `if: always()`. Если блокировать мерж не нужно,
+поставьте `fail-on-gate: "false"`: Action только сообщит результат.
 
 ### Бесплатно в CI
 
