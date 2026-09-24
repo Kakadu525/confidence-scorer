@@ -77,7 +77,7 @@ def test_single_check_cannot_yield_full_confidence():
     assert score.verdict_key != "pass"
     assert score.evidence_coverage == cfg.weights.property_tests
     assert score.evidence_cap is not None
-    assert any("потолок доверия" in note for note in score.notes)
+    assert any("trust ceiling" in note for note in score.notes)
 
 
 def test_full_coverage_is_not_capped():
@@ -101,7 +101,7 @@ def test_technical_errors_do_not_count_as_failures():
         ]
     )
     assert pt.sub_score == 100.0
-    assert any("не удалось проверить технически" in note for note in pt.notes)
+    assert any("could not be checked for technical reasons" in note for note in pt.notes)
 
 
 def test_only_errors_means_check_did_not_run():

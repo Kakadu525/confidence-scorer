@@ -75,7 +75,7 @@ def test_second_reviewer_uses_different_provider_by_default():
 
 @pytest.mark.parametrize(
     ("provider", "model", "hint"),
-    [("openai", "claude-opus-5", "модель Claude"), ("anthropic", "gpt-4.1", "не похожа на модель Claude")],
+    [("openai", "claude-opus-5", "is a Claude model"), ("anthropic", "gpt-4.1", "doesn't look like a Claude model")],
 )
 def test_provider_model_mismatch_is_rejected_with_hint(provider, model, hint):
     from confidence_scorer.config import ProviderConfig

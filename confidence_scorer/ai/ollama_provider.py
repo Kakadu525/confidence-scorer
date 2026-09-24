@@ -12,6 +12,7 @@ from confidence_scorer.ai.base import (
     extract_json,
     looks_truncated,
 )
+from confidence_scorer.i18n import tr
 
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 DEFAULT_CONTEXT_WINDOW = 32768
@@ -88,14 +89,22 @@ class OllamaProvider:
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:200]
             if exc.code == 404:
-                self._failures.record(f"модель {self.model} не скачана в Ollama: ollama pull {self.model}")
+                self._failures.record(
+                    tr(
+                        f"model {self.model} is not downloaded in Ollama: ollama pull {self.model}",
+                        f"модель {self.model} не скачана в Ollama: ollama pull {self.model}",
+                    )
+                )
             else:
-                self._failures.record(f"Ollama вернула HTTP {exc.code}: {detail}")
+                self._failures.record(tr(f"Ollama returned HTTP {exc.code}: {detail}", f"Ollama вернула HTTP {exc.code}: {detail}"))
             return None
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             reason = getattr(exc, "reason", exc)
             self._failures.record(
-                f"Ollama недоступна ({self.root}): {reason}. Запущена ли она? (ollama serve)"
+                tr(
+                    f"Ollama is unreachable ({self.root}): {reason}. Is it running? (ollama serve)",
+                    f"Ollama недоступна ({self.root}): {reason}. Запущена ли она? (ollama serve)",
+                )
             )
             return None
         except Exception as exc:  # noqa: BLE001
@@ -105,14 +114,19 @@ class OllamaProvider:
         prompt_chars = len(system) + len(user)
         if looks_truncated(prompt_chars, body.get("prompt_eval_count")):
             self._failures.record(
-                f"промпт не поместился в окно контекста ({self.context_window} токенов): Ollama отрезала "
-                f"начало, и модель видела не весь код. Увеличьте context_window или уменьшите "
-                f"limits.max_full_diff_bytes"
+                tr(
+                    f"the prompt did not fit into the context window ({self.context_window} tokens): Ollama cut off "
+                    f"the beginning, and the model did not see all of the code. Increase context_window or lower "
+                    f"limits.max_full_diff_bytes",
+                    f"промпт не поместился в окно контекста ({self.context_window} токенов): Ollama отрезала "
+                    f"начало, и модель видела не весь код. Увеличьте context_window или уменьшите "
+                    f"limits.max_full_diff_bytes",
+                )
             )
             return None
 
         text = (body.get("message") or {}).get("content") or ""
         parsed = extract_json(text)
         if parsed is None:
-            self._failures.record("ответ модели не содержит JSON")
+            self._failures.record(tr("the model's answer contains no JSON", "ответ модели не содержит JSON"))
         return parsed

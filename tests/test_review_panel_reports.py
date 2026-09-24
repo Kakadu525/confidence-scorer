@@ -55,7 +55,7 @@ def _pipeline_result(review) -> PipelineResult:
 def test_member_score_and_status_text():
     opus, qwen, deepseek = _panel().members
     assert member_score_text(opus) == "95"
-    assert member_score_text(qwen) == "90 → 75 (потолок: medium)"
+    assert member_score_text(qwen) == "90 → 75 (cap: medium)"
     assert member_score_text(deepseek) == "-"
     assert member_status_text(opus) == "✓"
     assert member_status_text(deepseek) == "не задана переменная окружения DEEPSEEK_API_KEY"
@@ -66,19 +66,19 @@ def test_terminal_shows_panel_table_and_reviewer_column():
     render_terminal_report(_pipeline_result(_panel()), console)
     text = console.export_text()
 
-    assert "Второй AI-ревьюер: панель" in text
-    assert "90 → 75 (потолок: medium)" in text
-    assert "Панель: 88, ответили 75% по весу" in text
-    assert "Кто нашёл" in text
+    assert "Second AI reviewer: panel" in text
+    assert "90 → 75 (cap: medium)" in text
+    assert "Panel: 88, 75% answered by weight" in text
+    assert "Found by" in text
 
 
 def test_markdown_shows_panel_table_and_reviewer_column():
     md = render_markdown_report(_pipeline_result(_panel()))
 
-    assert "| Ревьюер | Вес | Оценка | Статус |" in md
+    assert "| Reviewer | Weight | Score | Status |" in md
     assert "| anthropic/claude-opus-5 | 2 | 95 | ✓ |" in md
-    assert "Панель: 88, ответили 75% по весу" in md
-    assert "| Severity | Файл | Описание | Кто нашёл |" in md
+    assert "Panel: 88, 75% answered by weight" in md
+    assert "| Severity | File | Description | Found by |" in md
 
 
 def test_json_has_members_and_answered_share():
@@ -103,10 +103,10 @@ def test_single_reviewer_reports_look_as_before():
 
     console = Console(record=True, width=200)
     render_terminal_report(result, console)
-    assert "панель" not in console.export_text()
+    assert "panel" not in console.export_text()
     md = render_markdown_report(result)
-    assert "| Ревьюер | Вес |" not in md
-    assert "| Severity | Файл | Описание |" in md
+    assert "| Reviewer | Weight |" not in md
+    assert "| Severity | File | Description |" in md
 
     payload = render_json_report(result)["second_reviewer"]
     assert payload["confidence"] == 80

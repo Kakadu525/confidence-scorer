@@ -57,7 +57,7 @@ class TestSemanticDiff:
     def test_non_numeric_risk_score_is_rejected(self):
         result = run_semantic_diff([_change()], FakeProvider({"risk_score": "высокий"}), Config())
         assert result.sub_score is None
-        assert "не число" in result.results[0].error
+        assert "not a number" in result.results[0].error
 
     def test_malformed_changes_are_filtered_out(self):
         provider = FakeProvider({"risk_score": 90, "changes": ["строка", {"без описания": 1}, {"description": "ок"}]})
@@ -119,7 +119,7 @@ class TestSecondReviewer:
         assert run_second_review("d", self._files(), FakeProvider({"confidence": 500}), Config()).confidence == 100
         bad = run_second_review("d", self._files(), FakeProvider({"confidence": "много"}), Config())
         assert bad.confidence is None
-        assert "не число" in bad.error
+        assert "not a number" in bad.error
 
     def test_garbage_response_degrades_to_error(self):
         result = run_second_review("d", self._files(), FakeProvider(None), Config())
@@ -142,12 +142,12 @@ class TestSecondReviewer:
         run_second_review("x" * 10_000, self._files(), provider, config)
 
         _, user = provider.prompts[0]
-        assert "diff обрезан по лимиту" in user
+        assert "diff truncated at the size limit" in user
         assert len(user) < 1000
 
     def test_unavailable_provider_reports_reason(self):
         result = run_second_review("d", self._files(), FakeProvider({}, available=False), Config())
-        assert "недоступен" in result.error
+        assert "unavailable" in result.error
 
 
 class TestStrategyGeneration:

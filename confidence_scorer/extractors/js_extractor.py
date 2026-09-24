@@ -6,6 +6,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from confidence_scorer.i18n import tr
+
 JS_HELPERS_DIR = Path(__file__).resolve().parent.parent / "js_helpers"
 EXTRACT_SCRIPT = JS_HELPERS_DIR / "extract.js"
 
@@ -63,20 +65,24 @@ def _run_node(node_binary: str, payload: dict) -> tuple[dict | None, str | None]
             cwd=str(JS_HELPERS_DIR),
         )
     except FileNotFoundError:
-        return None, f"Node.js не найден ({node_binary})"
+        return None, tr(f"Node.js not found ({node_binary})", f"Node.js не найден ({node_binary})")
     except subprocess.TimeoutExpired:
-        return None, f"таймаут Node-парсера ({_NODE_TIMEOUT_S}s)"
+        return None, tr(f"Node parser timeout ({_NODE_TIMEOUT_S}s)", f"таймаут Node-парсера ({_NODE_TIMEOUT_S}s)")
     except OSError as exc:
-        return None, f"не удалось запустить Node: {exc!r}"
+        return None, tr(f"could not start Node: {exc!r}", f"не удалось запустить Node: {exc!r}")
 
     if proc.returncode != 0:
-        return None, f"Node-парсер завершился с кодом {proc.returncode}: {(proc.stderr or '').strip()[:300]}"
+        stderr = (proc.stderr or "").strip()[:300]
+        return None, tr(
+            f"the Node parser exited with code {proc.returncode}: {stderr}",
+            f"Node-парсер завершился с кодом {proc.returncode}: {stderr}",
+        )
     if not proc.stdout:
-        return None, "Node-парсер не вернул вывод"
+        return None, tr("the Node parser returned no output", "Node-парсер не вернул вывод")
     try:
         result = json.loads(proc.stdout)
     except json.JSONDecodeError:
-        return None, "Node-парсер вернул не-JSON"
+        return None, tr("the Node parser returned non-JSON", "Node-парсер вернул не-JSON")
     if "error" in result:
         return None, str(result["error"])
     return result, None
@@ -135,7 +141,7 @@ def diff_files(
         node_binary, {"files": [{"path": path, "old": old, "new": new} for path, old, new in files]}
     )
     if payload is None:
-        return {}, {path: error or "Node-парсер недоступен" for path, _, _ in files}
+        return {}, {path: error or tr("the Node parser is unavailable", "Node-парсер недоступен") for path, _, _ in files}
 
     diffs: dict[str, list[ChangedJsFunction]] = {}
     issues: dict[str, str] = {}
@@ -143,7 +149,7 @@ def diff_files(
     for path, _, _ in files:
         entry = results.get(path)
         if entry is None:
-            issues[path] = "Node-парсер не вернул результат по файлу"
+            issues[path] = tr("the Node parser returned no result for the file", "Node-парсер не вернул результат по файлу")
         elif "error" in entry:
             issues[path] = str(entry["error"])
         else:

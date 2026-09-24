@@ -142,7 +142,7 @@ def test_compat_provider_rejects_truncated_prompt(monkeypatch):
     provider = _compat_provider(monkeypatch, completions)
 
     assert provider.complete_json("s", "x" * 50_000) is None
-    assert "отрезал" in provider.failure_reason()
+    assert "cut off" in provider.failure_reason()
 
 
 def test_compat_provider_explains_rate_limit(monkeypatch):
@@ -214,7 +214,7 @@ def test_ollama_rejects_truncated_prompt(monkeypatch):
     )
 
     assert provider.complete_json("s", "x" * 44_888) is None
-    assert "окно контекста" in provider.failure_reason()
+    assert "context window" in provider.failure_reason()
 
 
 def test_ollama_missing_model_suggests_pull(monkeypatch):

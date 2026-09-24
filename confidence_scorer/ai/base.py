@@ -6,6 +6,8 @@ import re
 import threading
 from typing import Protocol
 
+from confidence_scorer.i18n import tr
+
 DEFAULT_MAX_TOKENS = 16_000
 
 
@@ -35,18 +37,21 @@ def describe_api_error(exc: BaseException, *, model: str, endpoint: str | None =
     kind = type(exc).__name__
     where = f" ({endpoint})" if endpoint else ""
     if kind == "RateLimitError":
-        return (
+        return tr(
+            "rate limit exceeded (429). On free tiers lower "
+            "limits.max_parallel_ai_calls to 1 or wait for the daily limit to reset",
             "превышен лимит запросов (429). На бесплатных тарифах уменьшите "
-            "limits.max_parallel_ai_calls до 1 или дождитесь сброса дневного лимита"
+            "limits.max_parallel_ai_calls до 1 или дождитесь сброса дневного лимита",
         )
     if kind == "AuthenticationError":
-        return f"ключ отклонён сервером{where}" + (f", проверьте {key_env}" if key_env else "")
+        check = tr(f", check {key_env}", f", проверьте {key_env}") if key_env else ""
+        return tr(f"the server rejected the key{where}", f"ключ отклонён сервером{where}") + check
     if kind == "PermissionDeniedError":
-        return f"у ключа нет доступа к модели {model}{where}"
+        return tr(f"the key has no access to model {model}{where}", f"у ключа нет доступа к модели {model}{where}")
     if kind == "NotFoundError":
-        return f"модель {model} не найдена{where}"
+        return tr(f"model {model} not found{where}", f"модель {model} не найдена{where}")
     if kind in ("APIConnectionError", "APITimeoutError", "ConnectionError", "URLError", "TimeoutError"):
-        return f"сервер недоступен{where}: {exc}"
+        return tr(f"server unreachable{where}: {exc}", f"сервер недоступен{where}: {exc}")
     return f"{kind}: {str(exc)[:200]}"
 
 
@@ -82,24 +87,34 @@ def missing_requirement_for(
     sdk_module: str | None,
 ) -> str | None:
     if key_env and not api_key:
-        return f"не задана переменная окружения {key_env} (provider: {provider_name}, model: {model})"
+        return tr(
+            f"environment variable {key_env} is not set (provider: {provider_name}, model: {model})",
+            f"не задана переменная окружения {key_env} (provider: {provider_name}, model: {model})",
+        )
     if sdk_module and not sdk_installed(sdk_module):
-        return f"не установлен Python-пакет {sdk_module}: pip install \"confidence-scorer[{sdk_module}]\""
+        return tr(
+            f"Python package {sdk_module} is not installed",
+            f"не установлен Python-пакет {sdk_module}",
+        ) + f': pip install "confidence-scorer[{sdk_module}]"'
     return None
 
 
 def unavailable_reason(provider: AIProvider | None) -> str:
     if provider is None:
-        return "AI-провайдер не настроен"
+        return tr("AI provider is not configured", "AI-провайдер не настроен")
     missing = getattr(provider, "missing_requirement", None)
     detail = missing() if callable(missing) else None
     if not detail:
         from confidence_scorer.config import API_KEY_ENV_BY_PROVIDER
 
         name = getattr(provider, "name", "?")
-        env = API_KEY_ENV_BY_PROVIDER.get(name, "API-ключа")
-        detail = f"не задана переменная окружения {env} (provider: {name}, model: {getattr(provider, 'model', '?')})"
-    return f"AI-провайдер недоступен: {detail}"
+        env = API_KEY_ENV_BY_PROVIDER.get(name, tr("for the API key", "API-ключа"))
+        model = getattr(provider, "model", "?")
+        detail = tr(
+            f"environment variable {env} is not set (provider: {name}, model: {model})",
+            f"не задана переменная окружения {env} (provider: {name}, model: {model})",
+        )
+    return tr(f"AI provider unavailable: {detail}", f"AI-провайдер недоступен: {detail}")
 
 
 _JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", re.DOTALL)

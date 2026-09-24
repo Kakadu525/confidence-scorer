@@ -19,6 +19,7 @@ from confidence_scorer.extractors.js_extractor import (
     node_available,
 )
 from confidence_scorer.git_diff import ChangedFile
+from confidence_scorer.i18n import current_language, tr
 
 JS_HELPERS_DIR = Path(__file__).resolve().parent.parent / "js_helpers"
 DIFF_WORKER_SCRIPT = JS_HELPERS_DIR / "diff_worker.js"
@@ -36,7 +37,10 @@ JsStrategyAI = Callable[[_FnLike, list[str]], "dict[str, Spec] | None"]
 
 def _build_param_specs(fn: ExtractedJsFunction, strategy_ai: JsStrategyAI | None) -> tuple[list[dict] | None, str | None]:
     if any(p.kind == "rest" for p in fn.params):
-        return None, "rest-параметры (...args) не поддерживаются генератором входных данных"
+        return None, tr(
+            "rest parameters (...args) are not supported by the input generator",
+            "rest-параметры (...args) не поддерживаются генератором входных данных",
+        )
 
     ordered_specs: list[dict] = []
     unresolved: list[str] = []
@@ -50,16 +54,23 @@ def _build_param_specs(fn: ExtractedJsFunction, strategy_ai: JsStrategyAI | None
         return ordered_specs, None
 
     if strategy_ai is None:
-        return None, f"нет TS type hints и AI-генерация стратегий выключена: {', '.join(unresolved)}"
+        return None, tr(
+            "no TS type hints and AI strategy generation is disabled", "нет TS type hints и AI-генерация стратегий выключена"
+        ) + f": {', '.join(unresolved)}"
 
     ai_specs = strategy_ai(_FnLike(fn.name, fn.source), unresolved)
     if not ai_specs:
-        return None, f"не удалось построить генератор входных данных для: {', '.join(unresolved)}"
+        return None, tr(
+            "could not build an input generator for", "не удалось построить генератор входных данных для"
+        ) + f": {', '.join(unresolved)}"
 
     for entry in ordered_specs:
         if entry["spec"] is None:
             if entry["name"] not in ai_specs:
-                return None, f"AI не предложил стратегию для параметра '{entry['name']}'"
+                return None, tr(
+                    f"the AI did not propose a strategy for parameter '{entry['name']}'",
+                    f"AI не предложил стратегию для параметра '{entry['name']}'",
+                )
             entry["spec"] = ai_specs[entry["name"]]
 
     return ordered_specs, None
@@ -75,7 +86,7 @@ def _execute_file_batch(
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         return [
-            FunctionCheckResult(t["name"], file_path, "skipped", True, reason="исчерпан общий бюджет времени")
+            FunctionCheckResult(t["name"], file_path, "skipped", True, reason=tr("total time budget exhausted", "исчерпан общий бюджет времени"))
             for t in tasks_for_file
         ]
 
@@ -86,6 +97,7 @@ def _execute_file_batch(
         "maxExamples": config.js.fast_check_examples,
         "seed": config.js.seed,
         "perFunctionTimeoutS": config.js.per_function_timeout_s,
+        "lang": current_language(),
     }
 
     try:
@@ -103,13 +115,13 @@ def _execute_file_batch(
     except subprocess.TimeoutExpired:
         return [
             FunctionCheckResult(
-                t["name"], file_path, "error", True, reason=f"таймаут воркера на файл ({timeout_s:.0f}s)"
+                t["name"], file_path, "error", True, reason=tr(f"per-file worker timeout ({timeout_s:.0f}s)", f"таймаут воркера на файл ({timeout_s:.0f}s)")
             )
             for t in tasks_for_file
         ]
     except Exception as exc:  # noqa: BLE001
         return [
-            FunctionCheckResult(t["name"], file_path, "error", True, reason=f"воркер упал: {exc!r}")
+            FunctionCheckResult(t["name"], file_path, "error", True, reason=tr(f"worker crashed: {exc!r}", f"воркер упал: {exc!r}"))
             for t in tasks_for_file
         ]
 
@@ -132,7 +144,7 @@ def _execute_file_batch(
         if task["name"] not in reported:
             results.append(
                 FunctionCheckResult(
-                    task["name"], file_path, "error", True, reason="воркер не вернул результат по функции"
+                    task["name"], file_path, "error", True, reason=tr("the worker returned no result for the function", "воркер не вернул результат по функции")
                 )
             )
     return results
@@ -155,7 +167,10 @@ def run_js_property_tests(
                 results.append(
                     FunctionCheckResult(
                         "*", cf.path, "skipped", True,
-                        reason="Node.js недоступен или зависимости js_helpers не установлены (npm install)",
+                        reason=tr(
+                            "Node.js is not available or js_helpers dependencies are not installed (npm install)",
+                            "Node.js недоступен или зависимости js_helpers не установлены (npm install)",
+                        ),
                     )
                 )
         return results
@@ -178,7 +193,7 @@ def run_js_property_tests(
             if change.change_type != "modified":
                 continue
             if tested_so_far >= config.limits.max_functions_per_run:
-                results.append(FunctionCheckResult(change.name, cf.path, "skipped", change.new.is_public, reason="превышен лимит max_functions_per_run"))
+                results.append(FunctionCheckResult(change.name, cf.path, "skipped", change.new.is_public, reason=tr("max_functions_per_run limit exceeded", "превышен лимит max_functions_per_run")))
                 continue
 
             specs, err = _build_param_specs(change.new, strategy_ai)

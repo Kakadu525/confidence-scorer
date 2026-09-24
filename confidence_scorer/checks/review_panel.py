@@ -7,6 +7,7 @@ from confidence_scorer.ai.base import AIProvider
 from confidence_scorer.checks.second_reviewer import SecondReviewResult, run_second_review
 from confidence_scorer.config import Config, ReviewerConfig
 from confidence_scorer.git_diff import ChangedFile
+from confidence_scorer.i18n import tr
 
 DISAGREEMENT_SPREAD = 40
 
@@ -92,7 +93,8 @@ class ReviewPanelResult:
             return None
         if len(self.members) == 1:
             return self.members[0].result.error
-        return "; ".join(f"{m.label}: {m.result.error or 'нет данных'}" for m in self.members)
+        no_data = tr("no data", "нет данных")
+        return "; ".join(f"{m.label}: {m.result.error or no_data}" for m in self.members)
 
     @property
     def consistency_notes(self) -> list[str]:
@@ -110,11 +112,19 @@ class ReviewPanelResult:
         answered = self.answered
         if answered and len(answered) < len(self.members):
             notes.append(
-                f"второй ревьюер: ответили {len(answered)} из {len(self.members)} участников "
-                f"({self.answered_share * 100:.0f}% по весу)"
+                tr(
+                    f"second reviewer: {len(answered)} of {len(self.members)} members answered "
+                    f"({self.answered_share * 100:.0f}% by weight)",
+                    f"второй ревьюер: ответили {len(answered)} из {len(self.members)} участников "
+                    f"({self.answered_share * 100:.0f}% по весу)",
+                )
             )
+            no_data = tr("no data", "нет данных")
             notes.extend(
-                f"второй ревьюер · {m.label}: не ответил ({m.result.error or 'нет данных'})"
+                tr(
+                    f"second reviewer · {m.label}: did not answer ({m.result.error or no_data})",
+                    f"второй ревьюер · {m.label}: не ответил ({m.result.error or no_data})",
+                )
                 for m in self.members
                 if not m.answered
             )
@@ -122,7 +132,12 @@ class ReviewPanelResult:
             scores = [m.score for m in answered]
             if max(scores) - min(scores) >= DISAGREEMENT_SPREAD:
                 listing = ", ".join(f"{m.label} {m.score:.0f}" for m in answered)
-                notes.append(f"ревьюеры разошлись: {listing}; посмотрите их замечания")
+                notes.append(
+                    tr(
+                        f"reviewers disagree: {listing}; read their findings",
+                        f"ревьюеры разошлись: {listing}; посмотрите их замечания",
+                    )
+                )
         return notes
 
 

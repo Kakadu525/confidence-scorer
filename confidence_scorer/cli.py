@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import traceback
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from rich.console import Console
 
 from confidence_scorer.config import write_default_config
 from confidence_scorer.git_diff import WORKTREE, merge_base
+from confidence_scorer.i18n import ENV_VAR, SUPPORTED_LANGUAGES, current_language, set_config_language, tr
 from confidence_scorer.pipeline import run_pipeline
 from confidence_scorer.report.json_report import render_json_report
 from confidence_scorer.report.markdown import render_markdown_report
@@ -17,31 +19,46 @@ from confidence_scorer.report.terminal import render_terminal_report
 
 @click.group()
 @click.version_option(package_name="confidence-scorer")
-def main() -> None:
-    """Оценка уверенности для AI-сгенерированных PR и диффов."""
+@click.option(
+    "--lang",
+    type=click.Choice(SUPPORTED_LANGUAGES),
+    default=None,
+    help="Output language, overrides `language:` in confidence.yml (also CONFIDENCE_LANG)",
+)
+def main(lang: str | None) -> None:
+    """Confidence score for AI-generated PRs and diffs."""
+    if lang:
+        # Through the environment so that worker subprocesses inherit it too.
+        os.environ[ENV_VAR] = lang
 
 
 @main.command()
-@click.option("--path", default="confidence.yml", show_default=True, help="Куда записать конфиг")
-@click.option("--force", is_flag=True, help="Перезаписать существующий файл")
+@click.option("--path", default="confidence.yml", show_default=True, help="Where to write the config")
+@click.option("--force", is_flag=True, help="Overwrite an existing file")
 def init(path: str, force: bool) -> None:
-    """Создать confidence.yml с дефолтными настройками и комментариями."""
+    """Create confidence.yml with default settings and comments."""
     target = Path(path)
     if target.exists() and not force:
-        click.echo(f"{target} уже существует. Используйте --force для перезаписи.", err=True)
+        click.echo(
+            tr(
+                f"{target} already exists. Use --force to overwrite it.",
+                f"{target} уже существует. Используйте --force для перезаписи.",
+            ),
+            err=True,
+        )
         raise SystemExit(1)
-    write_default_config(target)
-    click.echo(f"Создан {target}")
+    write_default_config(target, language=current_language())
+    click.echo(tr(f"Created {target}", f"Создан {target}"))
 
 
 @main.command()
-@click.option("--repo", "repo_dir", default=".", show_default=True, help="Путь к git-репозиторию")
-@click.option("--config", "config_path", default=None, help="Путь к confidence.yml (по умолчанию ищется в repo)")
+@click.option("--repo", "repo_dir", default=".", show_default=True, help="Path to the git repository")
+@click.option("--config", "config_path", default=None, help="Path to confidence.yml (default: looked up in the repo)")
 def doctor(repo_dir: str, config_path: str | None) -> None:
-    """Показать, какие проверки заработают с текущими ключами и установленными пакетами.
+    """Show which checks will run with the current keys and installed packages.
 
-    Ничего не отправляет в API и не тратит деньги: только проверяет, заданы ли
-    переменные окружения и установлены ли SDK и Node.js.
+    Sends nothing to any API and costs nothing: it only checks whether the
+    environment variables are set and the SDKs and Node.js are installed.
     """
     from rich.table import Table
     from rich.text import Text
@@ -53,45 +70,65 @@ def doctor(repo_dir: str, config_path: str | None) -> None:
     try:
         config = load_config(config_path, repo_root=repo_dir)
     except Exception as exc:
-        click.echo(f"Конфиг не прошёл проверку: {exc}", err=True)
+        click.echo(tr(f"The config failed validation: {exc}", f"Конфиг не прошёл проверку: {exc}"), err=True)
         raise SystemExit(2) from exc
+    set_config_language(config.language)
 
     found = Path(config_path) if config_path else find_config_file(Path(repo_dir))
-    console.print(f"Конфиг: {found if found else 'не найден, используются настройки по умолчанию'}")
+    not_found = tr("not found, using default settings", "не найден, используются настройки по умолчанию")
+    console.print(f"{tr('Config', 'Конфиг')}: {found if found else not_found}")
 
     diagnosis = diagnose(config)
-    table = Table(title="Готовность проверок")
-    table.add_column("Проверка")
-    table.add_column("Статус")
-    table.add_column("Детали")
+    table = Table(title=tr("Check readiness", "Готовность проверок"))
+    table.add_column(tr("Check", "Проверка"))
+    table.add_column(tr("Status", "Статус"))
+    table.add_column(tr("Details", "Детали"))
     for check in diagnosis.checks:
-        status = Text("готова", style="green") if check.ready else Text("не будет выполнена", style="yellow")
+        if check.ready:
+            status = Text(tr("ready", "готова"), style="green")
+        else:
+            status = Text(tr("will not run", "не будет выполнена"), style="yellow")
         label = check.label if check.scored else f"{check.label} *"
         table.add_row(label, status, check.detail)
     console.print(table)
-    console.print("[dim]* не входит в score напрямую, но расширяет охват property-тестов[/dim]")
+    console.print(
+        tr(
+            "[dim]* not part of the score directly, but widens property test coverage[/dim]",
+            "[dim]* не входит в score напрямую, но расширяет охват property-тестов[/dim]",
+        )
+    )
 
     if diagnosis.score_cap is None:
-        console.print("[green]Все проверки готовы, score не ограничен покрытием.[/green]")
+        console.print(
+            tr(
+                "[green]All checks are ready, the score is not capped by coverage.[/green]",
+                "[green]Все проверки готовы, score не ограничен покрытием.[/green]",
+            )
+        )
     else:
         console.print(
-            f"[yellow]Отработает {diagnosis.coverage * 100:.0f}% веса проверок, score будет не выше "
-            f"{diagnosis.score_cap:.0f}.[/yellow] Недостающие ключи задаются переменными окружения, "
-            f"подробности в разделе README «AI-ключи и модели»."
+            tr(
+                f"[yellow]{diagnosis.coverage * 100:.0f}% of check weight will run, the score will be at most "
+                f"{diagnosis.score_cap:.0f}.[/yellow] Missing keys are set through environment variables, "
+                f"see \"AI keys and models\" in the README.",
+                f"[yellow]Отработает {diagnosis.coverage * 100:.0f}% веса проверок, score будет не выше "
+                f"{diagnosis.score_cap:.0f}.[/yellow] Недостающие ключи задаются переменными окружения, "
+                f"подробности в разделе README «AI-ключи и модели».",
+            )
         )
 
 
 @main.command()
-@click.option("--base", default=None, help="Базовый ref/commit для сравнения (по умолчанию merge-base с origin/main)")
-@click.option("--head", default=WORKTREE, show_default=True, help="Целевой ref/commit, или WORKTREE для рабочего дерева")
-@click.option("--repo", "repo_dir", default=".", show_default=True, help="Путь к git-репозиторию")
-@click.option("--config", "config_path", default=None, help="Путь к confidence.yml (по умолчанию ищется в repo)")
+@click.option("--base", default=None, help="Base ref/commit to compare against (default: merge-base with origin/main)")
+@click.option("--head", default=WORKTREE, show_default=True, help="Target ref/commit, or WORKTREE for the working tree")
+@click.option("--repo", "repo_dir", default=".", show_default=True, help="Path to the git repository")
+@click.option("--config", "config_path", default=None, help="Path to confidence.yml (default: looked up in the repo)")
 @click.option("--format", "output_format", type=click.Choice(["terminal", "json", "markdown"]), default="terminal", show_default=True)
-@click.option("--json-out", "json_out_path", default=None, help="Дополнительно записать JSON-отчёт в файл (независимо от --format)")
-@click.option("--markdown-out", "markdown_out_path", default=None, help="Дополнительно записать Markdown-отчёт в файл (независимо от --format)")
-@click.option("--fail-under", "fail_under", type=int, default=None, help="Переопределить порог thresholds.fail_below для merge gate")
-@click.option("--no-gate", is_flag=True, help="Всегда завершаться с exit code 0 (только информативно)")
-@click.option("--debug", is_flag=True, help="Печатать полную трассировку при ошибке выполнения")
+@click.option("--json-out", "json_out_path", default=None, help="Also write the JSON report to a file (regardless of --format)")
+@click.option("--markdown-out", "markdown_out_path", default=None, help="Also write the Markdown report to a file (regardless of --format)")
+@click.option("--fail-under", "fail_under", type=int, default=None, help="Override thresholds.fail_below for the merge gate")
+@click.option("--no-gate", is_flag=True, help="Always exit with code 0 (informational only)")
+@click.option("--debug", is_flag=True, help="Print the full traceback on a runtime error")
 def run(
     base: str | None,
     head: str,
@@ -104,7 +141,7 @@ def run(
     no_gate: bool,
     debug: bool,
 ) -> None:
-    """Прогнать confidence-скоринг для диффа между --base и --head."""
+    """Run confidence scoring for the diff between --base and --head."""
     console = Console(stderr=False)
 
     if base is None:
@@ -115,21 +152,34 @@ def run(
             except Exception:  # noqa: BLE001, S112
                 continue
         if base is None:
-            click.echo("Не удалось автоматически определить --base. Укажите его явно.", err=True)
+            click.echo(
+                tr(
+                    "Could not determine --base automatically. Pass it explicitly.",
+                    "Не удалось автоматически определить --base. Укажите его явно.",
+                ),
+                err=True,
+            )
             raise SystemExit(2)
 
     status_console = Console(stderr=True)
     try:
         with status_console.status(
-            "[bold cyan]Анализ диффа: differential-тесты, semantic diff, AI-ревью…", spinner="dots"
+            tr(
+                "[bold cyan]Analyzing the diff: differential tests, semantic diff, AI review…",
+                "[bold cyan]Анализ диффа: differential-тесты, semantic diff, AI-ревью…",
+            ),
+            spinner="dots",
         ):
             result = run_pipeline(base, head, repo_dir=repo_dir, config_path=config_path)
     except Exception as exc:
-        click.echo(f"Ошибка выполнения: {exc!r}", err=True)
+        click.echo(tr(f"Runtime error: {exc!r}", f"Ошибка выполнения: {exc!r}"), err=True)
         if debug:
             traceback.print_exc()
         else:
-            click.echo("Запустите с --debug, чтобы увидеть полную трассировку.", err=True)
+            click.echo(
+                tr("Run with --debug to see the full traceback.", "Запустите с --debug, чтобы увидеть полную трассировку."),
+                err=True,
+            )
         raise SystemExit(2) from exc
 
     json_payload = json.dumps(render_json_report(result), ensure_ascii=False, indent=2)

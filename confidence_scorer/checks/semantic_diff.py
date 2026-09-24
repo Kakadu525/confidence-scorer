@@ -7,6 +7,7 @@ from confidence_scorer.ai.base import DEFAULT_MAX_TOKENS, AIProvider, failure_re
 from confidence_scorer.ai.prompts import semantic_diff_prompt
 from confidence_scorer.checks.severity import apply_ceiling, severity_ceiling, worst_severity
 from confidence_scorer.config import Config
+from confidence_scorer.i18n import tr
 from confidence_scorer.models import FunctionChange
 
 
@@ -41,8 +42,13 @@ class SemanticDiffCheckResult:
             ceiling = severity_ceiling(r.changes)
             if ceiling is not None and r.risk_score > ceiling:
                 notes.append(
-                    f"semantic_diff: {r.file_path}::{r.qualname}: risk_score {r.risk_score} понижен до {ceiling}: "
-                    f"модель сама нашла изменение с severity {worst_severity(r.changes)}"
+                    f"semantic_diff: {r.file_path}::{r.qualname}: "
+                    + tr(
+                        f"risk_score {r.risk_score} lowered to {ceiling}: "
+                        f"the model itself found a change with severity {worst_severity(r.changes)}",
+                        f"risk_score {r.risk_score} понижен до {ceiling}: "
+                        f"модель сама нашла изменение с severity {worst_severity(r.changes)}",
+                    )
                 )
         return notes
 
@@ -51,7 +57,7 @@ class SemanticDiffCheckResult:
         errors = [r.error for r in self.results if r.error]
         if errors:
             return errors[0]
-        return "нет изменённых функций"
+        return tr("no changed functions", "нет изменённых функций")
 
     @property
     def notable_changes(self) -> list[tuple[str, dict]]:
@@ -68,7 +74,7 @@ def _truncate(src: str | None, max_bytes: int) -> str:
     encoded = src.encode("utf-8")
     if len(encoded) <= max_bytes:
         return src
-    return encoded[:max_bytes].decode("utf-8", errors="ignore") + "\n# ... (обрезано)"
+    return encoded[:max_bytes].decode("utf-8", errors="ignore") + "\n# ... (truncated)"
 
 
 def _evaluate_one(fc: FunctionChange, provider: AIProvider | None, config: Config) -> SemanticChangeResult:
@@ -81,13 +87,13 @@ def _evaluate_one(fc: FunctionChange, provider: AIProvider | None, config: Confi
     raw = provider.complete_json(system, user, max_tokens=DEFAULT_MAX_TOKENS)
 
     if not isinstance(raw, dict) or "risk_score" not in raw:
-        reason = failure_reason(provider) or "AI вернул некорректный ответ"
+        reason = failure_reason(provider) or tr("the AI returned an invalid answer", "AI вернул некорректный ответ")
         return SemanticChangeResult(fc.qualname, fc.file_path, None, error=reason)
 
     try:
         risk = int(raw["risk_score"])
     except (TypeError, ValueError):
-        return SemanticChangeResult(fc.qualname, fc.file_path, None, error="risk_score не число")
+        return SemanticChangeResult(fc.qualname, fc.file_path, None, error=tr("risk_score is not a number", "risk_score не число"))
     risk = max(0, min(100, risk))
 
     changes = raw.get("changes")

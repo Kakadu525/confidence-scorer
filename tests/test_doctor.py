@@ -86,7 +86,7 @@ def test_cli_doctor_runs_without_keys(tmp_path, monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert "ANTHROPIC_API_KEY" in result.output
-    assert "не выше 70" in result.output
+    assert "at most 70" in result.output
 
 
 def test_cli_doctor_reports_invalid_config(tmp_path):
@@ -96,4 +96,4 @@ def test_cli_doctor_reports_invalid_config(tmp_path):
     result = CliRunner().invoke(main, ["doctor", "--repo", str(tmp_path)])
 
     assert result.exit_code == 2
-    assert "модель Claude" in result.output
+    assert "is a Claude model" in result.output

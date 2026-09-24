@@ -142,7 +142,7 @@ def spec_to_strategy(spec: Spec):
 
     kind = spec.get("kind")
     if kind not in ALLOWED_KINDS:
-        raise ValueError(f"strategy kind не в allowlist: {kind!r}")
+        raise ValueError(f"strategy kind is not in the allowlist: {kind!r}")
 
     if kind == "integers":
         kwargs = {k: spec[k] for k in ("min_value", "max_value") if k in spec}
@@ -184,7 +184,7 @@ def spec_to_strategy(spec: Spec):
     if kind == "one_of":
         return st.one_of(*[spec_to_strategy(s) for s in spec["options"]])
 
-    raise ValueError(f"strategy kind не реализован: {kind!r}")  # pragma: no cover
+    raise ValueError(f"strategy kind is not implemented: {kind!r}")  # pragma: no cover
 
 
 def neutral_value(spec: Spec) -> Any:

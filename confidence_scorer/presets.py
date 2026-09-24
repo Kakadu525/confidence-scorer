@@ -26,7 +26,7 @@ PRESETS: dict[str, ProviderPreset] = {
         max_output_tokens=None,
         docs_url="https://api-docs.deepseek.com/",
     ),
-    # Для консоли региона Пекин нужен base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    # The Beijing region console needs base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
     "qwen": ProviderPreset(
         base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
         api_key_env="DASHSCOPE_API_KEY",

@@ -10,6 +10,7 @@ from confidence_scorer.ai.base import (
     extract_json,
     missing_requirement_for,
 )
+from confidence_scorer.i18n import tr
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
@@ -99,14 +100,19 @@ class AnthropicProvider:
             return None
 
         if getattr(response, "stop_reason", None) == "refusal":
-            self._failures.record("запрос отклонён классификатором безопасности модели (и резервными моделями тоже)")
+            self._failures.record(
+                tr(
+                    "the request was refused by the model's safety classifier (and by the fallback models too)",
+                    "запрос отклонён классификатором безопасности модели (и резервными моделями тоже)",
+                )
+            )
             return None
 
         text = "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
         parsed = extract_json(text)
         if parsed is None:
-            reason = "ответ модели не содержит JSON"
+            reason = tr("the model's answer contains no JSON", "ответ модели не содержит JSON")
             if getattr(response, "stop_reason", None) == "max_tokens":
-                reason += ": ответ обрезан по max_tokens"
+                reason += tr(": the answer was cut off at max_tokens", ": ответ обрезан по max_tokens")
             self._failures.record(reason)
         return parsed

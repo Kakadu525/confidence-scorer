@@ -7,14 +7,17 @@ from dataclasses import dataclass
 
 from confidence_scorer.ai.base import sdk_installed
 from confidence_scorer.config import Config, ProviderConfig
+from confidence_scorer.i18n import tr
 
-CHECK_LABELS = {
-    "property_tests": "Property-тесты (Python)",
-    "property_tests_js": "Property-тесты (JS/TS)",
-    "semantic_diff": "Semantic diff (AI)",
-    "second_reviewer": "Второй AI-ревьюер",
-    "strategy_generation": "AI-генерация входных данных",
-}
+
+def check_label(key: str) -> str:
+    return {
+        "property_tests": tr("Property tests (Python)", "Property-тесты (Python)"),
+        "property_tests_js": tr("Property tests (JS/TS)", "Property-тесты (JS/TS)"),
+        "semantic_diff": "Semantic diff (AI)",
+        "second_reviewer": tr("Second AI reviewer", "Второй AI-ревьюер"),
+        "strategy_generation": tr("AI input generation", "AI-генерация входных данных"),
+    }[key]
 
 OllamaProbe = Callable[[str], "list[str] | None"]
 
@@ -60,16 +63,26 @@ def _target(cfg: ProviderConfig) -> str:
 def _ollama_status(key: str, cfg: ProviderConfig, scored: bool, probe: OllamaProbe) -> CheckStatus:
     from confidence_scorer.ai.ollama_provider import native_root
 
-    label = CHECK_LABELS[key]
+    label = check_label(key)
     root = native_root(cfg.endpoint)
     models = probe(root)
     if models is None:
-        return CheckStatus(key, label, False, f"{_target(cfg)}: Ollama не отвечает на {root}, запустите ollama serve", scored)
+        detail = tr(
+            f"Ollama is not responding at {root}, start ollama serve",
+            f"Ollama не отвечает на {root}, запустите ollama serve",
+        )
+        return CheckStatus(key, label, False, f"{_target(cfg)}: {detail}", scored)
     if not _model_present(cfg.model, models):
-        return CheckStatus(key, label, False, f"{_target(cfg)}: модель не скачана, выполните ollama pull {cfg.model}", scored)
-    return CheckStatus(
-        key, label, True, f"{_target(cfg)}: локально, окно {cfg.context_tokens} токенов, ключ не нужен", scored
+        detail = tr(
+            f"model is not downloaded, run ollama pull {cfg.model}",
+            f"модель не скачана, выполните ollama pull {cfg.model}",
+        )
+        return CheckStatus(key, label, False, f"{_target(cfg)}: {detail}", scored)
+    detail = tr(
+        f"local, {cfg.context_tokens}-token window, no key needed",
+        f"локально, окно {cfg.context_tokens} токенов, ключ не нужен",
     )
+    return CheckStatus(key, label, True, f"{_target(cfg)}: {detail}", scored)
 
 
 def _provider_status(
@@ -78,16 +91,18 @@ def _provider_status(
     if cfg.provider == "ollama":
         return _ollama_status(key, cfg, scored, probe)
 
-    label = CHECK_LABELS[key]
+    label = check_label(key)
     target = _target(cfg)
     if cfg.key_env and not env.get(cfg.key_env):
-        return CheckStatus(key, label, False, f"{target}: нет {cfg.key_env}", scored)
+        return CheckStatus(key, label, False, f"{target}: {tr('missing', 'нет')} {cfg.key_env}", scored)
     if cfg.sdk_module and not sdk_installed(cfg.sdk_module):
         return CheckStatus(
             key,
             label,
             False,
-            f'{target}: ключ задан, но не установлен пакет: pip install "confidence-scorer[{cfg.sdk_module}]"',
+            f"{target}: "
+            + tr("key is set, but the package is not installed", "ключ задан, но не установлен пакет")
+            + f': pip install "confidence-scorer[{cfg.sdk_module}]"',
             scored,
         )
     return CheckStatus(key, label, True, target, scored)
@@ -110,25 +125,40 @@ def diagnose(
     checks: list[CheckStatus] = []
 
     if config.execute_changed_code:
-        checks.append(CheckStatus("property_tests", CHECK_LABELS["property_tests"], True, "локально, ключи не нужны", True))
+        checks.append(
+            CheckStatus(
+                "property_tests", check_label("property_tests"), True, tr("local, no keys needed", "локально, ключи не нужны"), True
+            )
+        )
     else:
         checks.append(
             CheckStatus(
-                "property_tests", CHECK_LABELS["property_tests"], False, "выключено: execute_changed_code: false", True
+                "property_tests",
+                check_label("property_tests"),
+                False,
+                tr("disabled: execute_changed_code: false", "выключено: execute_changed_code: false"),
+                True,
             )
         )
 
     if not (config.execute_changed_code and config.js.enabled):
-        checks.append(CheckStatus("property_tests_js", CHECK_LABELS["property_tests_js"], False, "выключено в конфиге", False))
+        checks.append(
+            CheckStatus(
+                "property_tests_js", check_label("property_tests_js"), False, tr("disabled in the config", "выключено в конфиге"), False
+            )
+        )
     elif node_ok:
-        checks.append(CheckStatus("property_tests_js", CHECK_LABELS["property_tests_js"], True, "Node.js найден", False))
+        checks.append(
+            CheckStatus("property_tests_js", check_label("property_tests_js"), True, tr("Node.js found", "Node.js найден"), False)
+        )
     else:
         checks.append(
             CheckStatus(
                 "property_tests_js",
-                CHECK_LABELS["property_tests_js"],
+                check_label("property_tests_js"),
                 False,
-                "нет Node.js или зависимостей: cd confidence_scorer/js_helpers && npm install",
+                tr("no Node.js or dependencies", "нет Node.js или зависимостей")
+                + ": cd confidence_scorer/js_helpers && npm install",
                 False,
             )
         )
@@ -140,7 +170,7 @@ def diagnose(
     for member in reviewers:
         row = _provider_status("second_reviewer", member, env, scored=True, probe=probe)
         if len(reviewers) > 1:
-            row.label = f"{CHECK_LABELS['second_reviewer']} · {member.display_label}"
+            row.label = f"{check_label('second_reviewer')} · {member.display_label}"
         review_rows.append(row)
     checks.extend(review_rows)
     checks.append(

@@ -11,6 +11,7 @@ from confidence_scorer.ai.base import (
     looks_truncated,
     missing_requirement_for,
 )
+from confidence_scorer.i18n import tr
 
 _KEYLESS_PLACEHOLDER = "not-needed"
 
@@ -105,19 +106,23 @@ class OpenAIProvider:
             return None
 
         if not response.choices:
-            self._failures.record("сервер вернул пустой ответ")
+            self._failures.record(tr("the server returned an empty answer", "сервер вернул пустой ответ"))
             return None
 
         usage = getattr(response, "usage", None)
         if looks_truncated(len(system) + len(user), getattr(usage, "prompt_tokens", None)):
             self._failures.record(
-                "сервер отрезал часть промпта (модель видела не весь код): "
-                "увеличьте окно контекста модели на сервере"
+                tr(
+                    "the server cut off part of the prompt (the model did not see all of the code): "
+                    "increase the model's context window on the server",
+                    "сервер отрезал часть промпта (модель видела не весь код): "
+                    "увеличьте окно контекста модели на сервере",
+                )
             )
             return None
 
         text = response.choices[0].message.content or ""
         parsed = extract_json(text)
         if parsed is None:
-            self._failures.record("ответ модели не содержит JSON")
+            self._failures.record(tr("the model's answer contains no JSON", "ответ модели не содержит JSON"))
         return parsed

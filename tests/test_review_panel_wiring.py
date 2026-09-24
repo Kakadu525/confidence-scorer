@@ -50,14 +50,14 @@ def test_yaml_list_form(tmp_path):
 @pytest.mark.parametrize(
     ("panel", "message"),
     [
-        ([], "нужен хотя бы один ревьюер"),
-        ([{"provider": "ollama", "model": "m"}, {"provider": "ollama", "model": "m"}], "указан дважды"),
+        ([], "at least one reviewer is required"),
+        ([{"provider": "ollama", "model": "m"}, {"provider": "ollama", "model": "m"}], "is listed twice"),
         (
             [
                 {"provider": "openai_compatible", "model": "m", "base_url": "http://a/v1"},
                 {"provider": "openai_compatible", "model": "m", "base_url": "http://b/v1"},
             ],
-            "задайте участникам разные label",
+            "give the members different labels",
         ),
         ([{"provider": "ollama", "model": "m", "weight": 0}], "greater than 0"),
     ],
@@ -136,8 +136,8 @@ def test_doctor_lists_each_panel_member_and_predicts_cap():
     rows = [c for c in diagnosis.checks if c.key == "second_reviewer"]
 
     assert [c.label for c in rows] == [
-        "Второй AI-ревьюер · anthropic/claude-opus-5",
-        "Второй AI-ревьюер · ollama/qwen2.5-coder:7b",
+        "Second AI reviewer · anthropic/claude-opus-5",
+        "Second AI reviewer · ollama/qwen2.5-coder:7b",
     ]
     assert [c.ready for c in rows] == [True, False]
     assert diagnosis.coverage == pytest.approx(0.40 + 0.25 + 0.35 * 2 / 3)
@@ -147,4 +147,4 @@ def test_doctor_lists_each_panel_member_and_predicts_cap():
 def test_doctor_single_reviewer_row_unchanged():
     diagnosis = diagnose(Config(), env={}, node_ok=True)
     rows = [c for c in diagnosis.checks if c.key == "second_reviewer"]
-    assert [c.label for c in rows] == ["Второй AI-ревьюер"]
+    assert [c.label for c in rows] == ["Second AI reviewer"]

@@ -95,4 +95,4 @@ def test_nondeterministic_js_function_is_skipped():
     results = run_js_property_tests([ChangedFile("n.ts", "M", old, new, "javascript")], Config())
 
     assert [r.status for r in results] == ["skipped"]
-    assert "недетерминирована" in results[0].reason
+    assert "non-deterministic" in results[0].reason

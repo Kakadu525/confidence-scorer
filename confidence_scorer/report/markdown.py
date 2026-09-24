@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from confidence_scorer.checks.review_panel import as_panel
+from confidence_scorer.i18n import tr
 from confidence_scorer.pipeline import PipelineResult
 from confidence_scorer.report.panel_format import clip, member_score_text, member_status_text, panel_summary_text
 
@@ -13,11 +14,12 @@ VERDICT_EMOJI = {
     "unknown": "⚪",
 }
 
-CHECK_LABELS = {
-    "property_tests": "Property-based tests (differential)",
-    "semantic_diff": "Semantic diff (AI)",
-    "second_reviewer": "Второй AI-ревьюер",
-}
+def _check_label(key: str) -> str:
+    return {
+        "property_tests": "Property-based tests (differential)",
+        "semantic_diff": "Semantic diff (AI)",
+        "second_reviewer": tr("Second AI reviewer", "Второй AI-ревьюер"),
+    }[key]
 
 
 def _fmt(v: float | None) -> str:
@@ -38,16 +40,20 @@ def render_markdown_report(result: PipelineResult, comment_marker: str = "") -> 
     lines.append("")
     if score.evidence_cap is not None:
         lines.append(
-            f"> Покрытие проверками: **{score.evidence_coverage * 100:.0f}%**, "
-            f"потолок score ограничен **{score.evidence_cap:.0f}**."
+            tr(
+                f"> Check coverage: **{score.evidence_coverage * 100:.0f}%**, "
+                f"score capped at **{score.evidence_cap:.0f}**.",
+                f"> Покрытие проверками: **{score.evidence_coverage * 100:.0f}%**, "
+                f"потолок score ограничен **{score.evidence_cap:.0f}**.",
+            )
         )
         lines.append("")
-    lines.append("| Проверка | Sub-score | Вес |")
+    lines.append(tr("| Check | Sub-score | Weight |", "| Проверка | Sub-score | Вес |"))
     lines.append("|---|---|---|")
     for key in ("property_tests", "semantic_diff", "second_reviewer"):
         weight = score.weights_used.get(key)
         w = f"{weight * 100:.0f}%" if weight is not None else "-"
-        lines.append(f"| {CHECK_LABELS[key]} | {_fmt(score.sub_scores.get(key))} | {w} |")
+        lines.append(f"| {_check_label(key)} | {_fmt(score.sub_scores.get(key))} | {w} |")
     lines.append("")
 
     pt = result.property_result
@@ -56,34 +62,47 @@ def render_markdown_report(result: PipelineResult, comment_marker: str = "") -> 
         f"{pt.failed_count} failed / {pt.error_count} error / {pt.skipped_count} skipped</summary>\n"
     )
     if pt.results:
-        lines.append("| Функция | Файл | Статус | Детали |")
+        lines.append(tr("| Function | File | Status | Details |", "| Функция | Файл | Статус | Детали |"))
         lines.append("|---|---|---|---|")
         for r in pt.results:
             detail = r.reason or ""
             if r.status == "failed":
-                detail = f"вход=`{r.kwargs}`, было=`{r.old_repr}`, стало=`{r.new_repr}`"
+                detail = tr(
+                    f"input=`{r.kwargs}`, before=`{r.old_repr}`, after=`{r.new_repr}`",
+                    f"вход=`{r.kwargs}`, было=`{r.old_repr}`, стало=`{r.new_repr}`",
+                )
             detail = clip((detail or "").replace("|", "\\|"))
             lines.append(f"| `{r.qualname}` | `{r.file_path}` | {r.status} | {detail} |")
     else:
-        lines.append("_Изменённых функций для differential testing не найдено._")
+        lines.append(
+            tr(
+                "_No changed functions found for differential testing._",
+                "_Изменённых функций для differential testing не найдено._",
+            )
+        )
     lines.append("\n</details>\n")
 
     if result.file_issues:
-        lines.append("### Файлы, которые не удалось проанализировать")
+        lines.append(tr("### Files that could not be analyzed", "### Файлы, которые не удалось проанализировать"))
         for issue in result.file_issues:
             lines.append(f"- `{issue.path}` ({issue.language}): {issue.reason}")
         lines.append("")
 
     if score.hard_fail_reasons:
-        lines.append("### Подтверждённые контрпримеры поведения")
+        lines.append(tr("### Confirmed behavior counterexamples", "### Подтверждённые контрпримеры поведения"))
         for reason in score.hard_fail_reasons:
             lines.append(f"- {reason}")
         lines.append("")
 
     notable = result.semantic_result.notable_changes
     if notable:
-        lines.append("<details><summary>Semantic diff: заметные изменения поведения</summary>\n")
-        lines.append("| Функция | Severity | Описание |")
+        lines.append(
+            tr(
+                "<details><summary>Semantic diff: notable behavior changes</summary>\n",
+                "<details><summary>Semantic diff: заметные изменения поведения</summary>\n",
+            )
+        )
+        lines.append(tr("| Function | Severity | Description |", "| Функция | Severity | Описание |"))
         lines.append("|---|---|---|")
         for qualname, change in notable:
             desc = clip(str(change.get("description", "")).replace("|", "\\|"))
@@ -93,9 +112,9 @@ def render_markdown_report(result: PipelineResult, comment_marker: str = "") -> 
     review = as_panel(result.review_result)
     is_panel = len(review.members) > 1
     if review.issues or review.summary or is_panel:
-        lines.append("<details><summary>Второй AI-ревьюер</summary>\n")
+        lines.append(f"<details><summary>{_check_label('second_reviewer')}</summary>\n")
         if is_panel:
-            lines.append("| Ревьюер | Вес | Оценка | Статус |")
+            lines.append(tr("| Reviewer | Weight | Score | Status |", "| Ревьюер | Вес | Оценка | Статус |"))
             lines.append("|---|---|---|---|")
             for member in review.members:
                 status = member_status_text(member).replace("|", "\\|")[:120]
@@ -106,7 +125,9 @@ def render_markdown_report(result: PipelineResult, comment_marker: str = "") -> 
         if review.summary:
             lines.append(f"_{review.summary}_\n")
         if review.issues:
-            header = "| Severity | Файл | Описание |" + (" Кто нашёл |" if is_panel else "")
+            header = tr("| Severity | File | Description |", "| Severity | Файл | Описание |")
+            if is_panel:
+                header += tr(" Found by |", " Кто нашёл |")
             lines.append(header)
             lines.append("|---|---|---|" + ("---|" if is_panel else ""))
             for issue in review.issues:
@@ -118,11 +139,16 @@ def render_markdown_report(result: PipelineResult, comment_marker: str = "") -> 
         lines.append("\n</details>\n")
 
     if score.notes:
-        lines.append("<details><summary>Примечания</summary>\n")
+        lines.append(tr("<details><summary>Notes</summary>\n", "<details><summary>Примечания</summary>\n"))
         for n in score.notes:
             lines.append(f"- {n}")
         lines.append("\n</details>\n")
 
-    lines.append("\n<sub>Сгенерировано [confidence-scorer](https://github.com/Kakadu525/confidence-scorer). Доверяйте, но проверяйте.</sub>")
+    lines.append(
+        tr(
+            "\n<sub>Generated by [confidence-scorer](https://github.com/Kakadu525/confidence-scorer). Trust, but verify.</sub>",
+            "\n<sub>Сгенерировано [confidence-scorer](https://github.com/Kakadu525/confidence-scorer). Доверяйте, но проверяйте.</sub>",
+        )
+    )
 
     return "\n".join(lines)

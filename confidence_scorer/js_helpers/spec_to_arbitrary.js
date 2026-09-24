@@ -33,7 +33,7 @@ function textArbitrary(maxLength) {
 
 function specToArbitrary(spec) {
   if (!spec || !ALLOWED_KINDS.has(spec.kind)) {
-    throw new Error("strategy kind не в allowlist: " + JSON.stringify(spec && spec.kind));
+    throw new Error("strategy kind is not in the allowlist: " + JSON.stringify(spec && spec.kind));
   }
   switch (spec.kind) {
     case "integers": {
@@ -80,7 +80,7 @@ function specToArbitrary(spec) {
     case "one_of":
       return fc.oneof(...spec.options.map(specToArbitrary));
     default:
-      throw new Error("strategy kind не реализован: " + spec.kind);
+      throw new Error("strategy kind is not implemented: " + spec.kind);
   }
 }
 

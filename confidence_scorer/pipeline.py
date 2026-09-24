@@ -15,6 +15,7 @@ from confidence_scorer.checks.semantic_diff import SemanticDiffCheckResult, run_
 from confidence_scorer.config import Config, load_config
 from confidence_scorer.extractors import js_extractor, python_extractor
 from confidence_scorer.git_diff import ChangedFile, get_changed_files, unified_diff_text
+from confidence_scorer.i18n import set_config_language, tr
 from confidence_scorer.models import FunctionChange
 from confidence_scorer.scoring import ConfidenceScore, compute_score
 
@@ -65,7 +66,10 @@ def _diff_all_functions(
                 FileIssue(
                     path,
                     "javascript",
-                    "Node.js недоступен или зависимости js_helpers не установлены (npm install)",
+                    tr(
+                        "Node.js is not available or js_helpers dependencies are not installed (npm install)",
+                        "Node.js недоступен или зависимости js_helpers не установлены (npm install)",
+                    ),
                 )
                 for path, _, _ in js_files
             )
@@ -112,6 +116,7 @@ def run_pipeline(
     config_path: str | None = None,
 ) -> PipelineResult:
     config = load_config(config_path, repo_root=repo_dir)
+    set_config_language(config.language)
 
     changed_files = get_changed_files(
         base, head, repo_dir=repo_dir, exclude_globs=config.exclude, languages=config.languages
@@ -147,7 +152,8 @@ def run_pipeline(
         semantic_result = f_semantic.result()
         review_result = f_review.result()
 
-    extra_notes = [f"{issue.path}: файл не проанализирован ({issue.reason})" for issue in file_issues]
+    not_analyzed = tr("file not analyzed", "файл не проанализирован")
+    extra_notes = [f"{issue.path}: {not_analyzed} ({issue.reason})" for issue in file_issues]
     score = compute_score(property_result, semantic_result, review_result, config, extra_notes=extra_notes)
 
     return PipelineResult(

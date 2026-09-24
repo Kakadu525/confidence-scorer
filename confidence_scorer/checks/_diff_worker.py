@@ -11,6 +11,7 @@ import traceback
 from typing import Any
 
 from confidence_scorer.checks.strategy_builder import build_explicit_examples, spec_to_strategy
+from confidence_scorer.i18n import set_config_language, tr
 
 _HARD_KILL_GRACE_S = 5.0
 
@@ -70,7 +71,7 @@ class _time_limit:
         self._hard_timer = threading.Timer(
             self.seconds + _HARD_KILL_GRACE_S,
             _flush_and_exit,
-            args=(f"таймаут {self.seconds}s (процесс принудительно остановлен)",),
+            args=(tr(f"timeout {self.seconds}s (process force-stopped)", f"таймаут {self.seconds}s (процесс принудительно остановлен)"),),
         )
         self._hard_timer.daemon = True
         self._hard_timer.start()
@@ -168,12 +169,12 @@ def _run_one_function(
     old_fn = old_ns.get(qualname)
     new_fn = new_ns.get(qualname)
     if not callable(old_fn) or not callable(new_fn):
-        return {"qualname": qualname, "status": "error", "reason": "функция не найдена после exec"}
+        return {"qualname": qualname, "status": "error", "reason": tr("function not found after exec", "функция не найдена после exec")}
 
     try:
         strategies = {name: spec_to_strategy(spec) for name, spec in param_specs.items()}
     except Exception as exc:
-        return {"qualname": qualname, "status": "skipped", "reason": f"неподдерживаемый generator input: {exc!r}"}
+        return {"qualname": qualname, "status": "skipped", "reason": tr("unsupported generator input", "неподдерживаемый generator input") + f": {exc!r}"}
 
     from hypothesis import HealthCheck, example, given, settings
     from hypothesis import seed as hypothesis_seed
@@ -187,14 +188,20 @@ def _run_one_function(
                 kwargs,
                 f"raised {old_exc!r}" if old_exc else repr(old_result)[:300],
                 f"raised {new_exc!r}" if new_exc else repr(new_result)[:300],
-                "старая и новая версия расходятся в том, бросают ли они исключение",
+                tr(
+                    "the old and the new version disagree on whether they raise an exception",
+                    "старая и новая версия расходятся в том, бросают ли они исключение",
+                ),
             )
         if old_exc is None and not _outputs_equal(old_result, new_result):
             raise CounterexampleFound(
                 kwargs,
                 repr(old_result)[:300],
                 repr(new_result)[:300],
-                "старая и новая версия возвращают разные результаты на одном входе",
+                tr(
+                    "the old and the new version return different results for the same input",
+                    "старая и новая версия возвращают разные результаты на одном входе",
+                ),
             )
 
     try:
@@ -219,8 +226,12 @@ def _run_one_function(
             return {
                 "qualname": qualname,
                 "status": "skipped",
-                "reason": "функция недетерминирована (разные результаты на одном входе), "
-                "differential testing неприменим",
+                "reason": tr(
+                    "the function is non-deterministic (different results for the same input), "
+                    "differential testing does not apply",
+                    "функция недетерминирована (разные результаты на одном входе), "
+                    "differential testing неприменим",
+                ),
             }
         return {
             "qualname": qualname,
@@ -231,9 +242,9 @@ def _run_one_function(
             "reason": ce.reason,
         }
     except _Timeout:
-        return {"qualname": qualname, "status": "error", "reason": f"таймаут {per_function_timeout_s}s"}
+        return {"qualname": qualname, "status": "error", "reason": tr(f"timeout {per_function_timeout_s}s", f"таймаут {per_function_timeout_s}s")}
     except KeyboardInterrupt:
-        return {"qualname": qualname, "status": "error", "reason": f"таймаут {per_function_timeout_s}s"}
+        return {"qualname": qualname, "status": "error", "reason": tr(f"timeout {per_function_timeout_s}s", f"таймаут {per_function_timeout_s}s")}
     except Exception as exc:
         return {
             "qualname": qualname,
@@ -284,6 +295,7 @@ def run_batch(task_batch: dict) -> list[dict]:
 
 def main() -> None:
     task_batch = json.loads(sys.stdin.read())
+    set_config_language(task_batch.get("lang"))
 
     repo_dir = task_batch.get("repo_dir")
     if repo_dir and repo_dir not in sys.path:

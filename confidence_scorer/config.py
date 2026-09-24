@@ -7,6 +7,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from confidence_scorer.i18n import tr
 from confidence_scorer.presets import GENERIC_OPENAI_COMPATIBLE, PRESETS, ProviderPreset
 
 Provider = Literal["anthropic", "openai", "openai_compatible", "ollama", "deepseek", "qwen", "openrouter"]
@@ -33,7 +34,12 @@ class ProviderConfig(BaseModel):
     @classmethod
     def _http_only(cls, v: str | None) -> str | None:
         if v is not None and not v.lower().startswith(("http://", "https://")):
-            raise ValueError(f"base_url должен начинаться с http:// или https://, получено: {v!r}")
+            raise ValueError(
+                tr(
+                    f"base_url must start with http:// or https://, got: {v!r}",
+                    f"base_url должен начинаться с http:// или https://, получено: {v!r}",
+                )
+            )
         return v
 
     @model_validator(mode="after")
@@ -41,28 +47,54 @@ class ProviderConfig(BaseModel):
         is_claude = self.model.startswith("claude-")
         if self.provider == "openai" and is_claude:
             raise ValueError(
-                f"model '{self.model}' это модель Claude, а provider: openai. "
-                f"Поставьте provider: anthropic или укажите модель OpenAI (например, {DEFAULT_OPENAI_MODEL})."
+                tr(
+                    f"model '{self.model}' is a Claude model, but provider: openai. "
+                    f"Set provider: anthropic or pick an OpenAI model (for example, {DEFAULT_OPENAI_MODEL}).",
+                    f"model '{self.model}' это модель Claude, а provider: openai. "
+                    f"Поставьте provider: anthropic или укажите модель OpenAI (например, {DEFAULT_OPENAI_MODEL}).",
+                )
             )
         if self.provider == "anthropic":
             if not is_claude:
                 raise ValueError(
-                    f"model '{self.model}' не похожа на модель Claude (ID начинаются с 'claude-'), а provider: anthropic. "
-                    f"Для Anthropic используйте, например, {DEFAULT_ANTHROPIC_MODEL}."
+                    tr(
+                        f"model '{self.model}' doesn't look like a Claude model (IDs start with 'claude-'), "
+                        f"but provider: anthropic. For Anthropic use, for example, {DEFAULT_ANTHROPIC_MODEL}.",
+                        f"model '{self.model}' не похожа на модель Claude (ID начинаются с 'claude-'), "
+                        f"а provider: anthropic. Для Anthropic используйте, например, {DEFAULT_ANTHROPIC_MODEL}.",
+                    )
                 )
             if self.base_url or self.max_output_tokens:
                 raise ValueError(
-                    "base_url и max_output_tokens поддерживаются только для OpenAI-совместимых провайдеров, "
-                    "а не для provider: anthropic."
+                    tr(
+                        "base_url and max_output_tokens are only supported for OpenAI-compatible providers, "
+                        "not for provider: anthropic.",
+                        "base_url и max_output_tokens поддерживаются только для OpenAI-совместимых провайдеров, "
+                        "а не для provider: anthropic.",
+                    )
                 )
         if self.effort and self.provider != "anthropic":
-            raise ValueError(f"effort действует только для provider: anthropic, а здесь provider: {self.provider}.")
+            raise ValueError(
+                tr(
+                    f"effort only applies to provider: anthropic, but here provider: {self.provider}.",
+                    f"effort действует только для provider: anthropic, а здесь provider: {self.provider}.",
+                )
+            )
         if self.context_window and self.provider != "ollama":
-            raise ValueError("context_window задаётся только для provider: ollama, у облачных API окно фиксировано.")
+            raise ValueError(
+                tr(
+                    "context_window is only set for provider: ollama, cloud APIs have a fixed window.",
+                    "context_window задаётся только для provider: ollama, у облачных API окно фиксировано.",
+                )
+            )
         if self.provider == GENERIC_OPENAI_COMPATIBLE and not self.base_url:
             raise ValueError(
-                "для provider: openai_compatible нужен base_url, адрес OpenAI-совместимого API "
-                "(например, https://example.com/v1)."
+                tr(
+                    "provider: openai_compatible needs base_url, the address of an OpenAI-compatible API "
+                    "(for example, https://example.com/v1).",
+                    "для provider: openai_compatible нужен base_url, адрес OpenAI-совместимого API "
+                    "(например, https://example.com/v1).",
+                )
             )
         return self
 
@@ -132,20 +164,29 @@ class ProvidersConfig(BaseModel):
     @classmethod
     def _check_panel(cls, panel: list[ReviewerConfig]) -> list[ReviewerConfig]:
         if not panel:
-            raise ValueError("second_reviewer: нужен хотя бы один ревьюер")
+            raise ValueError(tr("second_reviewer: at least one reviewer is required", "second_reviewer: нужен хотя бы один ревьюер"))
         seen: set[tuple[str, str, str | None]] = set()
         labels: set[str] = set()
         for member in panel:
             key = (member.provider, member.model, member.endpoint)
             if key in seen:
                 raise ValueError(
-                    f"second_reviewer: {member.display_label} указан дважды: дубликат молча удвоил бы вес модели"
+                    tr(
+                        f"second_reviewer: {member.display_label} is listed twice: "
+                        f"the duplicate would silently double the model's weight",
+                        f"second_reviewer: {member.display_label} указан дважды: "
+                        f"дубликат молча удвоил бы вес модели",
+                    )
                 )
             seen.add(key)
             if member.display_label in labels:
                 raise ValueError(
-                    f"second_reviewer: имя '{member.display_label}' встречается дважды, "
-                    f"задайте участникам разные label"
+                    tr(
+                        f"second_reviewer: the name '{member.display_label}' appears twice, "
+                        f"give the members different labels",
+                        f"second_reviewer: имя '{member.display_label}' встречается дважды, "
+                        f"задайте участникам разные label",
+                    )
                 )
             labels.add(member.display_label)
         return panel
@@ -160,7 +201,7 @@ class WeightsConfig(BaseModel):
     def _normalize(self) -> WeightsConfig:
         total = self.property_tests + self.semantic_diff + self.second_reviewer
         if total <= 0:
-            raise ValueError("Сумма весов (weights) должна быть больше нуля")
+            raise ValueError(tr("The sum of weights must be greater than zero", "Сумма весов (weights) должна быть больше нуля"))
         if abs(total - 1.0) > 1e-6:
             self.property_tests /= total
             self.semantic_diff /= total
@@ -177,7 +218,10 @@ class ThresholdsConfig(BaseModel):
     def _check_order(self) -> ThresholdsConfig:
         if not (0 <= self.fail_below <= self.warn_below <= self.pass_at <= 100):
             raise ValueError(
-                "Пороги должны соблюдать порядок: 0 <= fail_below <= warn_below <= pass_at <= 100"
+                tr(
+                    "Thresholds must keep the order: 0 <= fail_below <= warn_below <= pass_at <= 100",
+                    "Пороги должны соблюдать порядок: 0 <= fail_below <= warn_below <= pass_at <= 100",
+                )
             )
         return self
 
@@ -218,7 +262,7 @@ class EvidenceConfig(BaseModel):
     @model_validator(mode="after")
     def _check_range(self) -> EvidenceConfig:
         if not 0 <= self.min_cap <= 100:
-            raise ValueError("evidence.min_cap должен быть в диапазоне 0..100")
+            raise ValueError(tr("evidence.min_cap must be within 0..100", "evidence.min_cap должен быть в диапазоне 0..100"))
         return self
 
 
@@ -234,6 +278,7 @@ class GitHubConfig(BaseModel):
 
 
 class Config(BaseModel):
+    language: Literal["en", "ru"] = "en"
     languages: list[Literal["python", "javascript"]] = Field(
         default_factory=lambda: ["python", "javascript"]
     )
@@ -295,13 +340,145 @@ def load_config(path: str | Path | None = None, *, repo_root: str | Path = ".") 
 
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
-        raise ValueError(f"{config_path}: конфиг должен быть YAML-словарём")
+        raise ValueError(
+            tr(f"{config_path}: the config must be a YAML mapping", f"{config_path}: конфиг должен быть YAML-словарём")
+        )
 
     return Config(**raw)
 
 
 DEFAULT_CONFIG_TEMPLATE = """\
+# confidence-scorer settings. All options and defaults: confidence_scorer/config.py
+
+# Language of reports, notes and PR comments: en | ru
+language: en
+
+languages: [python, javascript]
+
+exclude:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/*_test.py"
+  - "**/*.min.js"
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/migrations/**"
+  - "**/vendor/**"
+
+weights:
+  property_tests: 0.40
+  semantic_diff: 0.25
+  second_reviewer: 0.35
+
+thresholds:
+  pass_at: 85
+  warn_below: 65
+  fail_below: 40
+
+hard_fail:
+  enabled: true
+  cap_score_on_confirmed_counterexample: 35
+
+hypothesis:
+  max_examples: 50
+  per_function_timeout_s: 10
+  per_file_timeout_s: 60
+  total_budget_s: 180
+  seed: 0
+
+js:
+  enabled: true
+  node_binary: node
+  fast_check_examples: 30
+  per_function_timeout_s: 15
+  seed: 0
+
+limits:
+  max_functions_per_run: 25
+  max_diff_bytes_to_ai: 60000
+  max_full_diff_bytes: 120000
+  max_parallel_workers: 4
+  max_parallel_ai_calls: 4    # set to 1 on free tiers and local Ollama
+
+evidence:
+  enabled: true
+  min_cap: 50
+
+# Add the cache directory to .gitignore.
+cache:
+  enabled: true
+  dir: ".confidence_cache"
+  ttl_s: 1209600
+
+# Keys are never written to this file, they come from environment variables:
+#   anthropic   ANTHROPIC_API_KEY
+#   openai      OPENAI_API_KEY
+#   deepseek    DEEPSEEK_API_KEY
+#   qwen        DASHSCOPE_API_KEY
+#   openrouter  OPENROUTER_API_KEY
+#   ollama      no key needed
+# The API needs a key with a funded balance; a Claude Pro/Max or ChatGPT Plus subscription doesn't provide one.
+providers:
+  strategy_generation:
+    provider: anthropic
+    model: claude-opus-5
+
+  semantic_diff:
+    provider: anthropic
+    model: claude-opus-5
+    # effort: medium      # uncomment to lower the cost
+
+  second_reviewer:
+    provider: openai
+    model: gpt-4.1        # make sure the model is available in your OpenAI account
+  # If you only have an Anthropic key, replace the block above with:
+  # second_reviewer:
+  #   provider: anthropic
+  #   model: claude-opus-5
+
+  # A panel of several reviewers:
+  # second_reviewer:
+  #   - { provider: anthropic, model: claude-opus-5,    weight: 2 }
+  #   - { provider: ollama,    model: qwen2.5-coder:7b, weight: 1 }
+  #   - { provider: deepseek,  model: deepseek-flash,   weight: 1, label: deepseek }
+
+  # Free and local through Ollama (run ollama pull qwen2.5-coder:7b first):
+  # second_reviewer:
+  #   provider: ollama
+  #   model: qwen2.5-coder:7b
+  #
+  # DeepSeek:
+  # second_reviewer:
+  #   provider: deepseek
+  #   model: deepseek-flash
+  #
+  # OpenRouter, free models with the ":free" suffix:
+  # second_reviewer:
+  #   provider: openrouter
+  #   model: <model id>:free
+  #
+  # Another OpenAI-compatible server (LM Studio, vLLM):
+  # second_reviewer:
+  #   provider: openai_compatible
+  #   base_url: http://localhost:1234/v1
+  #   model: <model name on the server>
+  #   # api_key_env: MY_SERVER_KEY   # if the server needs a key
+
+github:
+  post_comment: true
+  comment_marker: "<!-- confidence-scorer:report -->"
+
+# Set to false in an untrusted environment so code from the diff is never run.
+execute_changed_code: true
+"""
+
+
+DEFAULT_CONFIG_TEMPLATE_RU = """\
 # Настройки confidence-scorer. Все параметры и значения по умолчанию: confidence_scorer/config.py
+
+# Язык отчётов, примечаний и комментариев в PR: en | ru
+language: ru
 
 languages: [python, javascript]
 
@@ -424,5 +601,6 @@ execute_changed_code: true
 """
 
 
-def write_default_config(path: Path) -> None:
-    path.write_text(DEFAULT_CONFIG_TEMPLATE, encoding="utf-8")
+def write_default_config(path: Path, language: str = "en") -> None:
+    template = DEFAULT_CONFIG_TEMPLATE_RU if language == "ru" else DEFAULT_CONFIG_TEMPLATE
+    path.write_text(template, encoding="utf-8")

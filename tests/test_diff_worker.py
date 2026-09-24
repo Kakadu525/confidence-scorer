@@ -77,7 +77,7 @@ class TestFalsePositives:
         new = "import random\ndef f(n: int) -> int:\n    return n + random.randint(0, 11) - 1\n"
         result = _one(old, new, {"n": {"kind": "integers"}})
         assert result["status"] == "skipped"
-        assert "недетерминирована" in result["reason"]
+        assert "non-deterministic" in result["reason"]
 
 
 class TestDetection:
@@ -93,7 +93,7 @@ class TestDetection:
         new = "def f(n: int) -> int:\n    if n == 0:\n        raise ValueError('нет')\n    return n\n"
         result = _one(old, new, {"n": {"kind": "integers"}})
         assert result["status"] == "failed"
-        assert "исключение" in result["reason"]
+        assert "exception" in result["reason"]
 
     def test_string_regression_is_caught_deterministically(self):
         old = "def f(s: str) -> str:\n    return s.strip().lower()\n"
@@ -118,7 +118,7 @@ class TestResilience:
         elapsed = time.monotonic() - started
 
         assert result["status"] == "error"
-        assert "таймаут" in result["reason"]
+        assert "timeout" in result["reason"]
         assert elapsed < 30, f"таймаут не сработал: прогон занял {elapsed:.0f}s"
 
     def test_unimportable_module_is_error_for_every_function(self):

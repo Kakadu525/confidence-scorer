@@ -2,6 +2,10 @@
 const fc = require("fast-check");
 const { specToArbitrary, buildExplicitExamples } = require("./spec_to_arbitrary");
 
+// Set from the batch sent by js_property_tests.py, mirrors confidence_scorer/i18n.py.
+let lang = "en";
+const tr = (en, ru) => (lang === "ru" ? ru : en);
+
 function readStdin() {
   return new Promise((resolve, reject) => {
     let data = "";
@@ -88,14 +92,14 @@ function runOne(task, maxExamples, seed, perFunctionTimeoutMs) {
     return { name: task.name, status: "error", reason: "load failed: " + e.message };
   }
   if (typeof oldFn !== "function" || typeof newFn !== "function") {
-    return { name: task.name, status: "error", reason: "функция не найдена после загрузки" };
+    return { name: task.name, status: "error", reason: tr("function not found after loading", "функция не найдена после загрузки") };
   }
 
   let arbs;
   try {
     arbs = task.params.map((p) => specToArbitrary(p.spec));
   } catch (e) {
-    return { name: task.name, status: "skipped", reason: "неподдерживаемый generator input: " + e.message };
+    return { name: task.name, status: "skipped", reason: tr("unsupported generator input: ", "неподдерживаемый generator input: ") + e.message };
   }
 
   if (arbs.length === 0) {
@@ -114,7 +118,10 @@ function runOne(task, maxExamples, seed, perFunctionTimeoutMs) {
         args,
         oldRepr: oldOutcome.error ? "throws " + oldOutcome.error.message : reprSafe(oldOutcome.value),
         newRepr: newOutcome.error ? "throws " + newOutcome.error.message : reprSafe(newOutcome.value),
-        reason: "старая и новая версия расходятся в том, бросают ли они исключение",
+        reason: tr(
+          "the old and the new version disagree on whether they raise an exception",
+          "старая и новая версия расходятся в том, бросают ли они исключение"
+        ),
       };
       return false;
     }
@@ -123,7 +130,10 @@ function runOne(task, maxExamples, seed, perFunctionTimeoutMs) {
         args,
         oldRepr: reprSafe(oldOutcome.value),
         newRepr: reprSafe(newOutcome.value),
-        reason: "старая и новая версия возвращают разные результаты на одном входе",
+        reason: tr(
+          "the old and the new version return different results for the same input",
+          "старая и новая версия возвращают разные результаты на одном входе"
+        ),
       };
       return false;
     }
@@ -151,7 +161,10 @@ function runOne(task, maxExamples, seed, perFunctionTimeoutMs) {
       return {
         name: task.name,
         status: "error",
-        reason: `таймаут ${Math.round(perFunctionTimeoutMs / 1000)}s (проверено ${report.numRuns} входов)`,
+        reason: tr(
+          `timeout ${Math.round(perFunctionTimeoutMs / 1000)}s (${report.numRuns} inputs checked)`,
+          `таймаут ${Math.round(perFunctionTimeoutMs / 1000)}s (проверено ${report.numRuns} входов)`
+        ),
       };
     }
     return { name: task.name, status: "passed" };
@@ -168,7 +181,10 @@ function runOne(task, maxExamples, seed, perFunctionTimeoutMs) {
     return {
       name: task.name,
       status: "skipped",
-      reason: "функция недетерминирована (разные результаты на одном входе), differential testing неприменим",
+      reason: tr(
+        "the function is non-deterministic (different results for the same input), differential testing does not apply",
+        "функция недетерминирована (разные результаты на одном входе), differential testing неприменим"
+      ),
     };
   }
 
@@ -191,6 +207,7 @@ async function main() {
     return;
   }
 
+  lang = batch.lang === "ru" ? "ru" : "en";
   const maxExamples = batch.maxExamples || 50;
   const seed = batch.seed === undefined ? null : batch.seed;
   const perFunctionTimeoutMs = (batch.perFunctionTimeoutS || 15) * 1000;

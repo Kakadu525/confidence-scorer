@@ -67,7 +67,7 @@ def test_terminal_report_renders_every_section():
     assert "Confidence Score" in text
     assert "Property-based tests" in text
     assert "broken.ts" in text
-    assert "Подтверждённые контрпримеры" in text
+    assert "Confirmed counterexamples" in text
     assert "Резюме" in text
 
 
@@ -94,7 +94,7 @@ def test_markdown_report_escapes_pipes_and_shows_issues():
 
     assert markdown.startswith("<!-- m -->")
     assert "broken.ts" in markdown
-    assert "не удалось проанализировать" in markdown
+    assert "could not be analyzed" in markdown
     assert "изменена \\| граница" in markdown
     assert "спорный \\| случай" in markdown
 
@@ -113,7 +113,7 @@ def test_markdown_report_reports_evidence_cap():
 
     markdown = render_markdown_report(result)
 
-    assert "Покрытие проверками" in markdown
+    assert "Check coverage" in markdown
 
 
 def test_json_report_contains_issues_and_coverage():
@@ -143,13 +143,13 @@ def test_terminal_report_keeps_new_value_of_counterexample():
 
     render_terminal_report(_result_with_long_counterexample(), console)
 
-    assert "стало=0.0" in console.export_text()
+    assert "after=0.0" in console.export_text()
 
 
 def test_markdown_report_keeps_new_value_of_counterexample():
     text = render_markdown_report(_result_with_long_counterexample(), comment_marker="<!-- m -->")
 
-    assert "стало=`0.0`" in text
+    assert "after=`0.0`" in text
 
 
 def test_long_details_are_clipped_with_ellipsis():

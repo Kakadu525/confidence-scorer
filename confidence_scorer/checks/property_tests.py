@@ -14,6 +14,7 @@ from confidence_scorer.checks.strategy_builder import Spec, annotation_to_spec
 from confidence_scorer.config import Config
 from confidence_scorer.extractors.python_extractor import ChangedFunction, ExtractedFunction, diff_functions
 from confidence_scorer.git_diff import ChangedFile
+from confidence_scorer.i18n import current_language, tr
 
 StrategyAI = Callable[[ExtractedFunction, list[str]], "dict[str, Spec] | None"]
 
@@ -66,8 +67,12 @@ class PropertyTestCheckResult:
         out: list[str] = []
         if self.error_count:
             out.append(
-                f"property_tests: {self.error_count} функц. не удалось проверить технически "
-                f"(см. статус error в отчёте); они исключены из score и не засчитаны как провал"
+                tr(
+                    f"property_tests: {self.error_count} function(s) could not be checked for technical reasons "
+                    f"(see the error status in the report); they are left out of the score and not counted as failures",
+                    f"property_tests: {self.error_count} функц. не удалось проверить технически "
+                    f"(см. статус error в отчёте); они исключены из score и не засчитаны как провал",
+                )
             )
         return out
 
@@ -78,7 +83,10 @@ class PropertyTestCheckResult:
             if r.status == "failed" and r.is_public:
                 reasons.append(
                     f"{r.file_path}::{r.qualname}: {r.reason} "
-                    f"(вход={r.kwargs}, было={r.old_repr}, стало={r.new_repr})"
+                    + tr(
+                        f"(input={r.kwargs}, before={r.old_repr}, after={r.new_repr})",
+                        f"(вход={r.kwargs}, было={r.old_repr}, стало={r.new_repr})",
+                    )
                 )
         return reasons
 
@@ -87,7 +95,10 @@ def _build_param_specs(
     fn: ExtractedFunction, strategy_ai: StrategyAI | None
 ) -> tuple[dict[str, Spec] | None, str | None]:
     if any(a.kind in ("vararg", "kwarg") for a in fn.args):
-        return None, "*args/**kwargs не поддерживаются генератором входных данных"
+        return None, tr(
+            "*args/**kwargs are not supported by the input generator",
+            "*args/**kwargs не поддерживаются генератором входных данных",
+        )
 
     specs: dict[str, Spec] = {}
     unresolved: list[str] = []
@@ -102,15 +113,22 @@ def _build_param_specs(
         return specs, None
 
     if strategy_ai is None:
-        return None, f"нет type hints и AI-генерация стратегий выключена: {', '.join(unresolved)}"
+        return None, tr(
+            "no type hints and AI strategy generation is disabled", "нет type hints и AI-генерация стратегий выключена"
+        ) + f": {', '.join(unresolved)}"
 
     ai_specs = strategy_ai(fn, unresolved)
     if not ai_specs:
-        return None, f"не удалось построить генератор входных данных для: {', '.join(unresolved)}"
+        return None, tr(
+            "could not build an input generator for", "не удалось построить генератор входных данных для"
+        ) + f": {', '.join(unresolved)}"
 
     for name in unresolved:
         if name not in ai_specs:
-            return None, f"AI не предложил стратегию для параметра '{name}'"
+            return None, tr(
+                f"the AI did not propose a strategy for parameter '{name}'",
+                f"AI не предложил стратегию для параметра '{name}'",
+            )
         specs[name] = ai_specs[name]
 
     return specs, None
@@ -146,7 +164,7 @@ def _execute_file_batch(
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         return [
-            FunctionCheckResult(t["qualname"], batch.path, "skipped", True, reason="исчерпан общий бюджет времени")
+            FunctionCheckResult(t["qualname"], batch.path, "skipped", True, reason=tr("total time budget exhausted", "исчерпан общий бюджет времени"))
             for t in batch.tasks
         ]
 
@@ -158,6 +176,7 @@ def _execute_file_batch(
         "new_source": batch.new_source,
         "functions": batch.tasks,
         "max_examples": config.hypothesis.max_examples,
+        "lang": current_language(),
         "per_function_timeout_s": config.hypothesis.per_function_timeout_s,
         "seed": config.hypothesis.seed,
         "repo_dir": repo_dir,
@@ -179,13 +198,13 @@ def _execute_file_batch(
     except subprocess.TimeoutExpired:
         return [
             FunctionCheckResult(
-                t["qualname"], batch.path, "error", True, reason=f"таймаут воркера на файл ({timeout_s:.0f}s)"
+                t["qualname"], batch.path, "error", True, reason=tr(f"per-file worker timeout ({timeout_s:.0f}s)", f"таймаут воркера на файл ({timeout_s:.0f}s)")
             )
             for t in batch.tasks
         ]
     except Exception as exc:  # noqa: BLE001
         return [
-            FunctionCheckResult(t["qualname"], batch.path, "error", True, reason=f"воркер упал: {exc!r}")
+            FunctionCheckResult(t["qualname"], batch.path, "error", True, reason=tr(f"worker crashed: {exc!r}", f"воркер упал: {exc!r}"))
             for t in batch.tasks
         ]
 
@@ -208,7 +227,7 @@ def _execute_file_batch(
         if task["qualname"] not in reported:
             results.append(
                 FunctionCheckResult(
-                    task["qualname"], batch.path, "error", True, reason="воркер не вернул результат по функции"
+                    task["qualname"], batch.path, "error", True, reason=tr("the worker returned no result for the function", "воркер не вернул результат по функции")
                 )
             )
     return results
@@ -251,7 +270,7 @@ def run_property_tests(
                 check_result.results.append(
                     FunctionCheckResult(
                         change.qualname, cf.path, "skipped", change.new.is_public,
-                        reason="превышен лимит max_functions_per_run",
+                        reason=tr("max_functions_per_run limit exceeded", "превышен лимит max_functions_per_run"),
                     )
                 )
                 continue

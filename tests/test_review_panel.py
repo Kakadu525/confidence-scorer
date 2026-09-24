@@ -91,8 +91,8 @@ def test_partial_answer_note_lists_missing_members():
         [_member("opus", 2, 90), _member("qwen", 1, 80), _member("deepseek", 1, error="нет DEEPSEEK_API_KEY")]
     )
     notes = panel.panel_notes
-    assert "второй ревьюер: ответили 2 из 3 участников (75% по весу)" in notes
-    assert "второй ревьюер · deepseek: не ответил (нет DEEPSEEK_API_KEY)" in notes
+    assert "second reviewer: 2 of 3 members answered (75% by weight)" in notes
+    assert "second reviewer · deepseek: did not answer (нет DEEPSEEK_API_KEY)" in notes
 
 
 @pytest.mark.parametrize(
@@ -101,13 +101,13 @@ def test_partial_answer_note_lists_missing_members():
 )
 def test_disagreement_note_threshold(low, expect_note):
     panel = ReviewPanelResult([_member("opus", 2, 90), _member("qwen", 1, low)])
-    has_note = any("разошлись" in n for n in panel.panel_notes)
+    has_note = any("disagree" in n for n in panel.panel_notes)
     assert has_note is expect_note
 
 
 def test_disagreement_note_names_scores():
     panel = ReviewPanelResult([_member("opus", 2, 90), _member("qwen", 1, 45)])
-    assert "ревьюеры разошлись: opus 90, qwen 45; посмотрите их замечания" in panel.panel_notes
+    assert "reviewers disagree: opus 90, qwen 45; read their findings" in panel.panel_notes
 
 
 def test_consistency_notes_are_prefixed_with_label():
@@ -115,7 +115,7 @@ def test_consistency_notes_are_prefixed_with_label():
         [_member("opus", 2, 90), _member("qwen", 1, 100, issues=[{"severity": "high", "description": "x"}])]
     )
     assert panel.consistency_notes == [
-        "second_reviewer · qwen: confidence 100 понижен до 40: ревьюер сам сообщил о проблеме с severity high"
+        "second_reviewer · qwen: confidence 100 lowered to 40: the reviewer itself reported an issue with severity high"
     ]
 
 
@@ -156,7 +156,7 @@ def test_partial_panel_lowers_evidence_cap():
     score = compute_score(pt, sd, panel, Config())
     assert score.evidence_coverage == pytest.approx(0.9125, abs=1e-3)
     assert score.overall == pytest.approx(95.6, abs=0.1)
-    assert "второй ревьюер: ответили 2 из 3 участников (75% по весу)" in score.notes
+    assert "second reviewer: 2 of 3 members answered (75% by weight)" in score.notes
 
 
 def test_full_panel_is_not_capped():
@@ -179,7 +179,7 @@ def test_disagreement_note_reaches_score_notes():
     pt, sd = _other_checks()
     panel = ReviewPanelResult([_member("opus", 2, 95), _member("qwen", 1, 40)])
     score = compute_score(pt, sd, panel, Config())
-    assert any("разошлись" in n for n in score.notes)
+    assert any("disagree" in n for n in score.notes)
 
 
 def test_panel_where_nobody_answered_is_not_run():
@@ -189,4 +189,4 @@ def test_panel_where_nobody_answered_is_not_run():
     )
     score = compute_score(pt, sd, panel, Config())
     assert score.sub_scores["second_reviewer"] is None
-    assert "second_reviewer: не выполнялся (opus: нет ANTHROPIC_API_KEY; qwen: Ollama недоступна)" in score.notes
+    assert "second_reviewer: did not run (opus: нет ANTHROPIC_API_KEY; qwen: Ollama недоступна)" in score.notes

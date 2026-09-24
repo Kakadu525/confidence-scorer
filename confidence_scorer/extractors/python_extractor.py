@@ -4,6 +4,8 @@ import ast
 import re
 from dataclasses import dataclass
 
+from confidence_scorer.i18n import tr
+
 
 @dataclass
 class ArgInfo:
@@ -90,9 +92,9 @@ def extract_functions_checked(source: str) -> tuple[dict[str, ExtractedFunction]
     try:
         tree = ast.parse(source)
     except SyntaxError as exc:
-        return {}, f"синтаксическая ошибка: {exc.msg} (строка {exc.lineno})"
+        return {}, tr(f"syntax error: {exc.msg} (line {exc.lineno})", f"синтаксическая ошибка: {exc.msg} (строка {exc.lineno})")
     except ValueError as exc:
-        return {}, f"не удалось разобрать файл: {exc}"
+        return {}, tr(f"could not parse the file: {exc}", f"не удалось разобрать файл: {exc}")
 
     functions: dict[str, ExtractedFunction] = {}
 
@@ -133,7 +135,9 @@ def diff_functions_checked(
     new_funcs, new_error = extract_functions_checked(new_source) if new_source else ({}, None)
 
     if new_error or old_error:
-        return [], f"новая версия: {new_error}" if new_error else f"старая версия: {old_error}"
+        if new_error:
+            return [], tr(f"new version: {new_error}", f"новая версия: {new_error}")
+        return [], tr(f"old version: {old_error}", f"старая версия: {old_error}")
     parse_error = None
 
     changes: list[ChangedFunction] = []

@@ -7,15 +7,30 @@ from confidence_scorer.checks.review_panel import ReviewPanelResult, as_panel
 from confidence_scorer.checks.second_reviewer import SecondReviewResult
 from confidence_scorer.checks.semantic_diff import SemanticDiffCheckResult
 from confidence_scorer.config import Config
+from confidence_scorer.i18n import tr
 
-VERDICT_TEXT = {
-    "hard_fail": "Найден подтверждённый контрпример поведения: не мержить без ручной проверки",
-    "fail": "Низкая уверенность, не мержить без ревью",
-    "manual": "Низкая или умеренная уверенность, нужна ручная проверка",
-    "warn": "Умеренная уверенность, рекомендуется ревью перед мержем",
-    "pass": "Высокая уверенность, можно мержить",
-    "unknown": "Недостаточно данных: ни одна проверка не смогла отработать",
-}
+
+def verdict_text(key: str) -> str:
+    return {
+        "hard_fail": tr(
+            "Confirmed behavior counterexample found: do not merge without a manual check",
+            "Найден подтверждённый контрпример поведения: не мержить без ручной проверки",
+        ),
+        "fail": tr("Low confidence, do not merge without review", "Низкая уверенность, не мержить без ревью"),
+        "manual": tr(
+            "Low to moderate confidence, needs a manual check",
+            "Низкая или умеренная уверенность, нужна ручная проверка",
+        ),
+        "warn": tr(
+            "Moderate confidence, review recommended before merge",
+            "Умеренная уверенность, рекомендуется ревью перед мержем",
+        ),
+        "pass": tr("High confidence, safe to merge", "Высокая уверенность, можно мержить"),
+        "unknown": tr(
+            "Not enough data: no check was able to run",
+            "Недостаточно данных: ни одна проверка не смогла отработать",
+        ),
+    }[key]
 
 
 @dataclass
@@ -65,11 +80,17 @@ def compute_score(
 
     notes: list[str] = list(extra_notes or [])
     if property_result.sub_score is None:
-        notes.append("property_tests: не выполнялись (нет подходящих изменённых функций, либо выполнение кода выключено)")
+        notes.append(
+            tr(
+                "property_tests: did not run (no suitable changed functions, or code execution is disabled)",
+                "property_tests: не выполнялись (нет подходящих изменённых функций, либо выполнение кода выключено)",
+            )
+        )
     if semantic_result.sub_score is None:
-        notes.append(f"semantic_diff: не выполнялся ({semantic_result.skip_reason})")
+        notes.append(tr("semantic_diff: did not run", "semantic_diff: не выполнялся") + f" ({semantic_result.skip_reason})")
     if review.sub_score is None:
-        notes.append(f"second_reviewer: не выполнялся ({review.error or 'нет данных'})")
+        reason = review.error or tr("no data", "нет данных")
+        notes.append(tr("second_reviewer: did not run", "second_reviewer: не выполнялся") + f" ({reason})")
     notes.extend(property_result.notes)
     notes.extend(semantic_result.consistency_notes)
     notes.extend(review.consistency_notes)
@@ -81,7 +102,7 @@ def compute_score(
         return ConfidenceScore(
             overall=None,
             verdict_key="unknown",
-            verdict_text=VERDICT_TEXT["unknown"],
+            verdict_text=verdict_text("unknown"),
             sub_scores=sub_scores,
             weights_used={},
             hard_fail=False,
@@ -106,9 +127,14 @@ def compute_score(
         evidence_cap = min_cap + (100.0 - min_cap) * coverage
         if overall > evidence_cap:
             notes.append(
-                f"score ограничен {evidence_cap:.0f} из-за неполного покрытия проверками "
-                f"(отработало {coverage * 100:.0f}% веса проверок). Это потолок доверия, "
-                f"а не оценка качества кода"
+                tr(
+                    f"score capped at {evidence_cap:.0f} because of incomplete check coverage "
+                    f"({coverage * 100:.0f}% of check weight ran). This is a trust ceiling, "
+                    f"not a rating of the code quality",
+                    f"score ограничен {evidence_cap:.0f} из-за неполного покрытия проверками "
+                    f"(отработало {coverage * 100:.0f}% веса проверок). Это потолок доверия, "
+                    f"а не оценка качества кода",
+                )
             )
             overall = evidence_cap
 
@@ -124,7 +150,7 @@ def compute_score(
     return ConfidenceScore(
         overall=round(overall, 1),
         verdict_key=key,
-        verdict_text=VERDICT_TEXT[key],
+        verdict_text=verdict_text(key),
         sub_scores=sub_scores,
         weights_used=normalized_weights,
         hard_fail=hard_fail,

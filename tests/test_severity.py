@@ -33,7 +33,7 @@ def test_contradictory_reviewer_is_capped_and_explained():
     review = SecondReviewResult(confidence=100, issues=[{"severity": "high", "description": "удалена проверка"}])
 
     assert review.sub_score == SEVERITY_CEILINGS["high"]
-    assert "понижен" in review.consistency_note
+    assert "lowered" in review.consistency_note
 
 
 def test_consistent_reviewer_is_untouched():
@@ -61,7 +61,7 @@ def test_contradiction_cannot_produce_pass_verdict():
     score = compute_score(PropertyTestCheckResult(), semantic, review, Config())
 
     assert score.verdict_key != "pass"
-    assert any("понижен" in note for note in score.notes)
+    assert any("lowered" in note for note in score.notes)
 
 
 def test_notes_name_the_actual_severity():
