@@ -1,44 +1,44 @@
 name: "Confidence Scorer"
 description: >-
-  Оценка уверенности для AI-сгенерированных PR: property-based тесты,
-  semantic diff и независимый AI-ревьюер перед мержем
+  Confidence score for AI-generated PRs: property-based tests,
+  semantic diff and an independent AI reviewer before merge
 branding:
   icon: "shield"
   color: "purple"
 
 inputs:
   python-version:
-    description: "Версия Python для установки confidence-scorer"
+    description: "Python version to install confidence-scorer with"
     default: "3.12"
   node-version:
-    description: "Версия Node.js для JS/TS property-тестов"
+    description: "Node.js version for JS/TS property tests"
     default: "24"
   base-ref:
-    description: "Базовый ref для сравнения (по умолчанию base ветки PR)"
+    description: "Base ref to compare against (default: the PR base branch)"
     default: ""
   config-path:
-    description: "Путь к confidence.yml (по умолчанию ищется в репозитории)"
+    description: "Path to confidence.yml (default: looked up in the repository)"
     default: ""
   fail-under:
-    description: "Переопределить порог thresholds.fail_below из конфига"
+    description: "Override thresholds.fail_below from the config"
     default: ""
   fail-on-gate:
-    description: "Падать, если сработал merge gate. С \"false\" Action только сообщает результат в outputs score, verdict и gate"
+    description: "Fail when the merge gate triggers. With \"false\" the Action only reports the result in the score, verdict and gate outputs"
     default: "true"
   post-comment:
-    description: "Публиковать/обновлять комментарий с отчётом в PR"
+    description: "Post or update a PR comment with the report"
     default: "true"
   github-token:
-    description: "Токен для публикации комментария в PR"
+    description: "Token used to post the PR comment"
     default: ${{ github.token }}
   anthropic-api-key:
-    description: "ANTHROPIC_API_KEY (нужен, если хотя бы одна проверка использует provider: anthropic)"
+    description: "ANTHROPIC_API_KEY (needed if at least one check uses provider: anthropic)"
     default: ""
   openai-api-key:
-    description: "OPENAI_API_KEY (нужен, если хотя бы одна проверка использует provider: openai)"
+    description: "OPENAI_API_KEY (needed if at least one check uses provider: openai)"
     default: ""
   openrouter-api-key:
-    description: "OPENROUTER_API_KEY (provider: openrouter; модели с суффиксом :free бесплатны)"
+    description: "OPENROUTER_API_KEY (provider: openrouter; models with the :free suffix cost nothing)"
     default: ""
   deepseek-api-key:
     description: "DEEPSEEK_API_KEY (provider: deepseek)"
@@ -49,13 +49,13 @@ inputs:
 
 outputs:
   score:
-    description: "Итоговый confidence score (0-100), либо пусто, если ни одна проверка не смогла отработать"
+    description: "Final confidence score (0-100), or empty if no check was able to run"
     value: ${{ steps.run.outputs.score }}
   verdict:
     description: "pass | warn | manual | fail | hard_fail | unknown"
     value: ${{ steps.run.outputs.verdict }}
   gate:
-    description: "passed | failed: сработал ли merge gate"
+    description: "passed | failed: whether the merge gate triggered"
     value: ${{ steps.run.outputs.gate }}
 
 runs:

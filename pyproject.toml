@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "confidence-scorer"
 version = "0.1.0"
-description = "Confidence-скорер для AI-сгенерированных PR/диффов: property-based тесты, semantic diff и независимый AI-ревьюер перед мержем."
+description = "Confidence score for AI-generated PRs and diffs: differential property-based tests, AI semantic diff and an independent AI reviewer before merge."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Dima" }]
-keywords = ["code-review", "property-based-testing", "ai", "ci", "differential-testing"]
+keywords = ["code-review", "property-based-testing", "ai", "ci", "differential-testing", "llm", "hypothesis", "github-actions", "pull-requests"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
