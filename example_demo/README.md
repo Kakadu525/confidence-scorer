@@ -25,7 +25,7 @@ imitate changes made by an AI.
 This is the second scenario with all three checks running on a local
 qwen2.5-coder:7b:
 
-![Safe refactoring: score 92/100](../docs/images/run-safe.png)
+![Safe refactoring: score 91/100](../docs/images/run-safe.png)
 
 The semantic diff finding here is a false one: `" ".join(text.split())` also
 stripped whitespace at the ends of the string. 7B models sometimes invent
