@@ -432,7 +432,11 @@ as there are functions.
 ## CLI
 
 ```bash
+confidence-score [--lang en|ru] <command> ...
+  # output language for this run; overrides `language:` in confidence.yml
+
 confidence-score init [--path confidence.yml] [--force]
+  # with --lang ru the template comes with Russian comments and `language: ru`
 
 confidence-score doctor [--repo PATH] [--config PATH]
   # which checks will run with the current keys, SDKs and Node.js, and what the
@@ -463,6 +467,7 @@ the same file that `confidence-score init` creates. Main sections:
 
 | Section | What it does |
 |---|---|
+| `language` | language of the terminal report, PR comment, notes and AI findings: `en` (default) or `ru` |
 | `languages` | which diff languages to analyze (`python`, `javascript`) |
 | `exclude` | globs that are never analyzed (tests, vendor, dist...) |
 | `weights` | weights of the three checks in the final score (normalized automatically) |
@@ -478,6 +483,14 @@ the same file that `confidence-score init` creates. Main sections:
 
 The config only stores the names of the environment variables that hold the
 keys, never the keys themselves.
+
+### Output language
+
+Reports are in English by default. For Russian set `language: ru` in
+`confidence.yml`, pass `--lang ru`, or set `CONFIDENCE_LANG=ru`. The flag and
+the environment variable win over the config. The AI checks are asked to write
+their findings in the same language; severities and JSON keys are never
+translated.
 
 ## GitHub Action
 
@@ -540,7 +553,8 @@ enough: remove `post-comment: "false"` and the artifact steps, and add
 
 Provider keys are passed through the inputs `anthropic-api-key`,
 `openai-api-key`, `openrouter-api-key`, `deepseek-api-key`,
-`dashscope-api-key`. The Action sets the outputs `score` and `verdict` and
+`dashscope-api-key`. The `language` input (`en` or `ru`) sets the language of
+the PR comment. The Action sets the outputs `score` and `verdict` and
 fails when the merge gate triggers, so it can be made a required status check.
 There is also a `gate` output (`passed` or `failed`). Outputs are available
 even after the Action fails, in steps with `if: always()`. If you don't want to

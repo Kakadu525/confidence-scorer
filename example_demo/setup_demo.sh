@@ -12,7 +12,7 @@ git config user.name "Confidence Scorer Demo"
 
 cat > pricing.py <<'EOF'
 def apply_discount(price: float, percent: float) -> float:
-    """Возвращает цену после скидки в процентах (0-100)."""
+    """Return the price after a percentage discount (0-100)."""
     if percent < 0 or percent > 100:
         raise ValueError("percent must be between 0 and 100")
     return price - (price * percent / 100)
@@ -20,7 +20,7 @@ EOF
 
 cat > textutils.py <<'EOF'
 def normalize_whitespace(text: str) -> str:
-    """Схлопывает любые последовательности пробельных символов в один пробел."""
+    """Collapse any run of whitespace characters into a single space."""
     return " ".join(text.split())
 EOF
 
@@ -30,7 +30,7 @@ git branch -q -m main
 
 cat > pricing.py <<'EOF'
 def apply_discount(price: float, percent: float) -> float:
-    """Возвращает цену после скидки в процентах (0-100)."""
+    """Return the price after a percentage discount (0-100)."""
     if percent > 100:
         raise ValueError("percent must be between 0 and 100")
     return price - (price * percent / 100)
@@ -44,17 +44,17 @@ import re
 
 
 def normalize_whitespace(text: str) -> str:
-    """Схлопывает любые последовательности пробельных символов в один пробел."""
+    """Collapse any run of whitespace characters into a single space."""
     return re.sub(r"\s+", " ", text).strip()
 EOF
 git add -A
 git commit -q -m "ai: rewrite normalize_whitespace using regex"
 git tag safe-commit
 
-echo "Демо-репозиторий готов: $TARGET_DIR"
+echo "Demo repository ready: $TARGET_DIR"
 echo
-echo "Баг (должен провалить property-тест и получить низкий score):"
+echo "Bug (should fail the property test and get a low score):"
 echo "  cd $TARGET_DIR && confidence-score run --base bug-commit~1 --head bug-commit"
 echo
-echo "Безопасный рефакторинг (должен пройти property-тест):"
+echo "Safe refactoring (should pass the property test):"
 echo "  cd $TARGET_DIR && confidence-score run --base safe-commit~1 --head safe-commit"

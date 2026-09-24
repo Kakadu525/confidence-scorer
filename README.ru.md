@@ -415,7 +415,11 @@ providers:
 ## CLI
 
 ```bash
+confidence-score [--lang en|ru] <команда> ...
+  # язык вывода для этого запуска; важнее, чем `language:` в confidence.yml
+
 confidence-score init [--path confidence.yml] [--force]
+  # с --lang ru шаблон создаётся с русскими комментариями и `language: ru`
 
 confidence-score doctor [--repo PATH] [--config PATH]
   # какие проверки заработают с текущими ключами, SDK и Node.js, и какой будет
@@ -446,6 +450,7 @@ merge gate: GitHub Action ниже превращает его в обязате
 
 | Секция | Что делает |
 |---|---|
+| `language` | язык отчёта в терминале, комментария в PR, примечаний и замечаний AI: `en` (по умолчанию) или `ru` |
 | `languages` | какие языки диффа анализировать (`python`, `javascript`) |
 | `exclude` | globs, которые никогда не анализируются (тесты, vendor, dist...) |
 | `weights` | веса трёх проверок в итоговом score (нормализуются автоматически) |
@@ -461,6 +466,13 @@ merge gate: GitHub Action ниже превращает его в обязате
 
 В конфиге хранятся только имена переменных окружения с ключами, сами ключи
 туда не пишутся.
+
+### Язык отчётов
+
+По умолчанию отчёты на английском. Чтобы получать их на русском, задайте
+`language: ru` в `confidence.yml`, передайте `--lang ru` или выставьте
+`CONFIDENCE_LANG=ru`. Флаг и переменная окружения важнее конфига. AI-проверки
+тоже пишут замечания на выбранном языке; severity и ключи JSON не переводятся.
 
 ## GitHub Action
 
@@ -519,8 +531,8 @@ workflow: уберите `post-comment: "false"` и шаги с артефакт
 `permissions` добавьте `pull-requests: write`.
 
 Ключи провайдеров передаются входами `anthropic-api-key`, `openai-api-key`,
-`openrouter-api-key`, `deepseek-api-key`, `dashscope-api-key`. Action
-выставляет outputs `score` и `verdict` и падает, если сработал merge gate,
+`openrouter-api-key`, `deepseek-api-key`, `dashscope-api-key`. Вход `language` (`en` или `ru`) задаёт язык комментария
+в PR. Action выставляет outputs `score` и `verdict` и падает, если сработал merge gate,
 поэтому его можно сделать обязательной проверкой (required status check).
 Ещё есть output `gate` (`passed` или `failed`). Outputs доступны и после
 падения Action, в шагах с `if: always()`. Если блокировать мерж не нужно,
