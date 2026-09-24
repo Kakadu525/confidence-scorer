@@ -3,61 +3,71 @@
 [![Tests](https://github.com/Kakadu525/confidence-scorer/actions/workflows/tests.yml/badge.svg)](https://github.com/Kakadu525/confidence-scorer/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Confidence%20Scorer-2088FF?logo=github)](https://github.com/marketplace/actions/confidence-scorer)
 
-Оценка уверенности для AI-сгенерированных PR и диффов. Перед мержем дифф
-проходит три независимые проверки, и на выходе получается score 0-100 с
-вердиктом: можно мержить, нужно ревью или мержить нельзя.
+**English** | [Русский](README.ru.md)
 
-![Отчёт confidence-score: найден контрпример, score 35/100](docs/images/run-bug.png)
+A confidence score for AI-generated pull requests and diffs. Before a merge,
+the diff goes through three independent checks and comes out with a 0-100
+score and a verdict: safe to merge, needs review, or do not merge.
 
-<sub>Настоящий прогон на демо из <a href="example_demo/">example_demo/</a>: все три проверки на локальной модели qwen2.5-coder:7b через Ollama.</sub>
+The main check does not ask an AI anything. It runs the **old and the new
+version of every changed function on the same generated inputs** and reports
+a reproducible counterexample when their behavior differs. Tests written by
+the same AI that wrote the code can't give you that.
 
-## Содержание
+![confidence-score report: counterexample found, score 35/100](docs/images/run-bug.png)
 
-- [Зачем](#зачем)
-- [Быстрый старт](#быстрый-старт)
-- [Как это работает](#как-это-работает)
-- [Установка](#установка)
-- [AI-ключи и модели](#ai-ключи-и-модели)
+<sub>A real run on the demo in <a href="example_demo/">example_demo/</a>: all three checks on a local qwen2.5-coder:7b model through Ollama.</sub>
+
+## Contents
+
+- [Why](#why)
+- [Quick start](#quick-start)
+- [How it works](#how-it-works)
+- [Installation](#installation)
+- [AI keys and models](#ai-keys-and-models)
 - [CLI](#cli)
-- [Конфигурация](#конфигурация-confidenceyml)
+- [Configuration](#configuration-confidenceyml)
 - [GitHub Action](#github-action)
-- [Безопасность](#безопасность)
-- [Ограничения](#ограничения)
-- [Разработка](#разработка)
+- [Security](#security)
+- [Limitations](#limitations)
+- [Development](#development)
 
-## Зачем
+## Why
 
-AI пишет всё больше PR. Такие диффы выглядят опрятно, проходят линтер и
-часто даже юнит-тесты. Только тесты писал тот же AI, что и код, поэтому они
-подтверждают, что AI написал задуманное, и ничего не говорят о том, ведёт ли
-себя код как раньше. Ревьюер-человек не успевает читать каждый такой PR так же
-внимательно, как раньше. confidence-scorer берёт на себя часть этой работы:
+AI writes more and more pull requests. These diffs look tidy, pass the linter
+and often pass the unit tests too. But the tests were written by the same AI
+as the code, so they confirm that the AI wrote what it meant to write. They say
+nothing about whether the code still behaves the way it used to. A human
+reviewer can no longer read every such PR as carefully as before.
+confidence-scorer takes over part of that work:
 
-1. Property-based differential testing. Для каждой изменённой функции
-   генерируются случайные и намеренно граничные входные данные, старая и новая
-   версия вызываются на одних и тех же входах, результаты сравниваются. Если
-   поведение разошлось, в отчёт попадает воспроизводимый контрпример.
-2. Semantic diff. AI описывает, что изменилось в поведении каждой функции
-   (форматирование не в счёт), и оценивает риск.
-3. Второй AI-ревьюер. Смотрит на весь дифф целиком, не видя выводов первых двух
-   проверок, и выставляет свою оценку уверенности со списком замечаний.
+1. **Property-based differential testing.** For every changed function it
+   generates random and deliberately edge-case inputs, calls the old and the
+   new version on the same inputs and compares the results. If the behavior
+   diverges, the report gets a reproducible counterexample.
+2. **Semantic diff.** An AI describes what changed in the behavior of each
+   function (formatting doesn't count) and rates the risk.
+3. **Independent second reviewer.** Another AI looks at the whole diff without
+   seeing the conclusions of the first two checks and gives its own confidence
+   score with a list of findings.
 
-Три числа сворачиваются в один score с настраиваемыми весами и порогами.
-Подтверждённый контрпример для публичной функции жёстко ограничивает итоговый
-score сверху, что бы ни сказали AI-ревьюеры (секция `hard_fail` в конфиге).
+The three numbers are folded into one score with configurable weights and
+thresholds. A confirmed counterexample for a public function caps the final
+score, whatever the AI reviewers say (the `hard_fail` section of the config).
 
-## Быстрый старт
+## Quick start
 
 ```bash
-pip install -e ".[all]"              # из корня репозитория; [all] = SDK Anthropic и OpenAI
-cd confidence_scorer/js_helpers && npm install && cd ../..   # нужно для JS/TS-проверок
+pip install -e ".[all]"              # from the repo root; [all] = Anthropic and OpenAI SDKs
+cd confidence_scorer/js_helpers && npm install && cd ../..   # needed for JS/TS checks
 
-confidence-score init                # создать confidence.yml (необязательно, есть дефолты)
+confidence-score init                # create confidence.yml (optional, defaults exist)
 ```
 
-Задайте ключи. Оба необязательны, подробности в разделе
-[«AI-ключи и модели»](#ai-ключи-и-модели).
+Set the keys. Both are optional, see
+[AI keys and models](#ai-keys-and-models) for details.
 
 ```bash
 # bash / zsh / Git Bash
@@ -66,192 +76,198 @@ export OPENAI_API_KEY=...
 ```
 
 ```powershell
-# PowerShell (Windows): действует до закрытия окна терминала
+# PowerShell (Windows): lasts until the terminal window is closed
 $env:ANTHROPIC_API_KEY = "..."
 $env:OPENAI_API_KEY = "..."
 ```
 
-Проверьте, что ключи подхватились. `doctor` ничего не отправляет в API и
-денег не тратит, он только показывает, какие проверки заработают:
+Check that the keys were picked up. `doctor` sends nothing to any API and
+costs nothing, it only shows which checks will run:
 
 ```bash
 confidence-score doctor
 confidence-score run --base main --head HEAD
 ```
 
-![confidence-score doctor: все проверки готовы](docs/images/doctor.png)
+![confidence-score doctor: all checks ready](docs/images/doctor.png)
 
-В [`example_demo/`](example_demo/) лежит демонстрация: реальный баг, который
-ловит property-тест, и безопасный рефакторинг, который этот тест проходит.
+[`example_demo/`](example_demo/) contains a demo: a real bug that the property
+test catches, and a safe refactoring that passes the same test.
 
-## Как это работает
+No API keys at all? Point every AI check at a local model through
+[Ollama](#ollama-free-and-local) and the whole pipeline runs for free on your
+machine.
+
+## How it works
 
 ```
                       git diff (base...head)
                               │
              ┌────────────────┴─────────────────┐
-             │ изменённые файлы .py / .js / .ts │
+             │   changed .py / .js / .ts files  │
              └────────────────┬─────────────────┘
                               │
-           AST/Babel-diff: какие функции реально изменились
+         AST/Babel diff: which functions actually changed
                               │
         ┌─────────────────────┼─────────────────────┐
         │                     │                     │
         ▼                     ▼                     ▼
- 1. differential        2. semantic diff     3. второй AI-ревьюер
- property-testing       (AI, по функциям)    (AI, весь diff целиком)
- (Hypothesis /                                свежий взгляд, не видит
-  fast-check,                                 выводы (1) и (2)
-  без AI: типы
-  или AI как fallback
-  для генераторов)
+ 1. differential        2. semantic diff     3. second AI reviewer
+ property testing       (AI, per function)   (AI, whole diff)
+ (Hypothesis /                                fresh eyes, doesn't see
+  fast-check,                                 the output of (1) and (2)
+  no AI: types,
+  or AI as a fallback
+  for generators)
         │                     │                     │
         └─────────────────────┼─────────────────────┘
                               ▼
                     scoring.py: weighted score
-                    + hard-fail правила
+                    + hard-fail rules
                               │
                               ▼
-                 score 0-100 + вердикт + отчёт
-            (terminal / markdown-комментарий в PR / JSON)
+               score 0-100 + verdict + report
+          (terminal / markdown PR comment / JSON)
 ```
 
 ### 1. Differential property-based testing
 
-Проверяются только изменённые функции: у добавленных и удалённых нет второй
-версии для сравнения. Для каждой из них confidence-scorer:
+Only changed functions are tested: added and removed ones have no second
+version to compare against. For each of them confidence-scorer:
 
-1. Строит генератор входных данных. Если у параметров есть type hints
+1. Builds an input generator. If the parameters have type hints
    (`int`, `str`, `list[int]`, `Optional[str]`, TS `number`/`string`/...),
-   генератор строится напрямую, без AI. Если типов нет, генератор может
-   предложить AI (`providers.strategy_generation` в конфиге). Его ответ не
-   исполняется через `eval`/`exec`: он разбирается по фиксированному списку
-   разрешённых стратегий (`confidence_scorer/checks/strategy_builder.py`), и
-   ничего сверх этого списка AI передать не может.
-2. Генерирует около 50 входов (настраивается) со смещением к граничным
-   значениям: 0, ±1, ±2, ±3 и так далее. Чисто случайный поиск по всему
-   диапазону `int` такие баги почти не находит.
-3. Вызывает старую и новую версию функции на каждом входе и сравнивает
-   результат и факт исключения.
-4. Найденное расхождение Hypothesis или fast-check сжимают до минимального
-   контрпримера, он и попадает в отчёт.
+   the generator is built directly, without AI. If there are no types, an AI
+   can propose the generator (`providers.strategy_generation` in the config).
+   Its answer is never run through `eval`/`exec`: it is parsed against a fixed
+   allowlist of strategies (`confidence_scorer/checks/strategy_builder.py`),
+   and the AI can't pass anything outside that list.
+2. Generates about 50 inputs (configurable), biased towards edge values:
+   0, ±1, ±2, ±3 and so on. A purely random search over the whole `int` range
+   almost never finds these bugs.
+3. Calls the old and the new version of the function on every input and
+   compares both the result and whether an exception was raised.
+4. Hypothesis or fast-check shrinks any divergence down to a minimal
+   counterexample, which goes into the report.
 
-Поддерживаются функции верхнего уровня модуля на Python и JS/TS (через Node,
-Babel и fast-check). Методы классов не поддерживаются, см.
-[«Ограничения»](#ограничения).
+Top-level functions in Python and JS/TS (through Node, Babel and fast-check)
+are supported. Class methods are not, see [Limitations](#limitations).
 
-Прогоны детерминированы: `hypothesis.seed` и `js.seed` по умолчанию
-фиксированы, и при перезапуске CI один и тот же PR получает тот же вердикт.
-С `seed: null` каждый прогон ищет новые входы, но результат может меняться
-от запуска к запуску.
+Runs are deterministic: `hypothesis.seed` and `js.seed` are fixed by default,
+so re-running CI gives the same PR the same verdict. With `seed: null` every
+run searches for new inputs, but the result may change from run to run.
 
 ### 2. Semantic diff
 
-На каждую изменённую функцию уходит отдельный AI-запрос со старой и новой
-версией исходника. Модель перечисляет поведенческие изменения с severity и
-ставит общую оценку риска 0-100. Эта проверка ловит то, что трудно найти
-случайными входами: изменения контракта, обработки ошибок, побочных эффектов
-и документированного поведения.
+Every changed function gets its own AI request with the old and the new
+source. The model lists behavioral changes with a severity and gives an
+overall risk score from 0 to 100. This check catches what random inputs have a
+hard time finding: changes to the contract, error handling, side effects and
+documented behavior.
 
-### 3. Второй AI-ревьюер
+### 3. Second AI reviewer
 
-Один AI-запрос на весь дифф. Промпт прямо говорит модели, что код мог написать
-AI, что к нему стоит отнестись скептически и что никто его ещё не проверял.
-В ответ приходят confidence 0-100, вердикт одной фразой и список замечаний.
+One AI request for the whole diff. The prompt tells the model outright that
+the code may have been written by an AI, that it deserves skepticism and that
+nobody has checked it yet. The answer is a confidence score from 0 to 100, a
+one-sentence verdict and a list of findings.
 
-По умолчанию `semantic_diff` и `second_reviewer` работают у разных
-провайдеров, Anthropic и OpenAI, чтобы второе мнение не повторяло слепые пятна
-первой модели. Любую другую комбинацию можно задать в `confidence.yml`
-(секция `providers:`).
+By default `semantic_diff` and `second_reviewer` use different providers,
+Anthropic and OpenAI, so that the second opinion doesn't repeat the blind
+spots of the first model. Any other combination can be set in
+`confidence.yml` (the `providers:` section).
 
-### Свёртка в score
-
-```
-overall = Σ(sub_score_i × weight_i) по проверкам, которые смогли отработать
-```
-
-Если проверка не отработала (нет AI-ключа, нет подходящих изменённых функций),
-она исключается, а её вес пропорционально делится между остальными. Если не
-отработала ни одна, score равен N/A, а не 100.
-
-Одного перераспределения весов мало. Без AI-ключей property-тесты могли бы
-проверить одну тривиальную функцию, и прогон выдал бы 100/100 «можно
-мержить». Поэтому итог дополнительно ограничивается потолком по покрытию:
+### Folding into a score
 
 ```
-coverage = Σ(вес проверки × её полнота) / (сумма всех весов)
+overall = Σ(sub_score_i × weight_i) over the checks that were able to run
+```
+
+If a check didn't run (no AI key, no suitable changed functions), it is
+excluded and its weight is split proportionally among the rest. If none ran,
+the score is N/A, not 100.
+
+Redistributing weights alone isn't enough. Without AI keys the property tests
+might check one trivial function, and the run would report 100/100 "safe to
+merge". So the result is also capped by coverage:
+
+```
+coverage = Σ(check weight × its completeness) / (sum of all weights)
 cap      = evidence.min_cap + (100 - evidence.min_cap) × coverage
 overall  = min(overall, cap)
 ```
 
-Полнота property-тестов и semantic diff равна 1 или 0 (отработали или нет), у
-панели ревьюеров это доля ответивших участников по весу.
+Completeness of the property tests and of the semantic diff is 1 or 0 (ran or
+didn't). For the reviewer panel it is the weighted share of members that
+answered.
 
-На дефолтных настройках один property-тест (вес 0.40) даёт потолок 70, то есть
-вердикт «рекомендуется ревью». Отчёт всегда показывает покрытие и сработавший
-потолок. Отключить потолок можно через `evidence.enabled: false`.
+With the default settings a single property test (weight 0.40) gives a cap of
+70, which means the verdict "review recommended". The report always shows the
+coverage and the cap that was applied. The cap can be turned off with
+`evidence.enabled: false`.
 
-Технические ошибки провалом не считаются. Статус `error` (не установлен
-модуль, упал воркер, истёк таймаут) значит «проверить не удалось»: такие
-функции не входят в знаменатель sub-score и перечисляются в примечаниях.
+Technical errors don't count as failures. The `error` status (module not
+installed, worker crashed, timeout) means "could not be checked": such
+functions are left out of the sub-score denominator and listed in the notes.
 
-Оценка модели не может противоречить её же находкам. В одном из живых прогонов
-второй ревьюер нашёл удалённую проверку границы с severity `high` и в том же
-ответе поставил confidence 100. Поэтому `confidence` второго ревьюера и
-`risk_score` каждой функции в semantic diff ограничиваются худшей из найденных
-моделью проблем: при `high` не выше 40, при `medium` не выше 75. Исходное
-значение остаётся в JSON-отчёте, а понижение объясняется в примечаниях.
+A model's score can't contradict its own findings. In one live run the second
+reviewer found a removed boundary check with severity `high` and in the same
+answer gave a confidence of 100. So the second reviewer's `confidence` and the
+per-function `risk_score` in the semantic diff are capped by the worst issue
+the model found: no more than 40 for `high`, no more than 75 for `medium`. The
+original value stays in the JSON report, and the notes explain the downgrade.
 
-При `hard_fail.enabled: true` (по умолчанию) подтверждённый контрпример для
-публичной функции ограничивает `overall` значением
-`hard_fail.cap_score_on_confirmed_counterexample` (по умолчанию 35).
+With `hard_fail.enabled: true` (the default) a confirmed counterexample for a
+public function caps `overall` at
+`hard_fail.cap_score_on_confirmed_counterexample` (35 by default).
 
-## Установка
+## Installation
 
 ```bash
-pip install -e ".[all]"            # рекомендуется: пакет + SDK Anthropic и OpenAI
-pip install -e ".[anthropic]"      # только Anthropic (если ключ OpenAI не нужен)
-pip install -e .                   # без SDK: AI-проверки работать не будут
+pip install -e ".[all]"            # recommended: package + Anthropic and OpenAI SDKs
+pip install -e ".[anthropic]"      # Anthropic only (if you don't need an OpenAI key)
+pip install -e .                   # no SDKs: AI checks won't run
 
-cd confidence_scorer/js_helpers && npm install      # JS/TS-проверки (опционально)
+cd confidence_scorer/js_helpers && npm install      # JS/TS checks (optional)
 ```
 
-SDK провайдеров ставятся отдельно. Если ключ задан, а SDK нет, проверка
-пропускается, и отчёт вместе с `confidence-score doctor` пишет, какой пакет
-доставить.
+Provider SDKs are installed separately. If a key is set but its SDK is
+missing, the check is skipped, and both the report and `confidence-score
+doctor` say which package to install.
 
-Нужен Python 3.10 или новее. Для JS/TS-проверок нужен Node.js 18+. Без него
-JS/TS property-тесты пропускаются с причиной в отчёте, остальное работает.
+Python 3.10 or newer is required. JS/TS checks need Node.js 18+. Without it the
+JS/TS property tests are skipped with a reason in the report, everything else
+works.
 
-## AI-ключи и модели
+## AI keys and models
 
-### Какая проверка какой ключ использует
+### Which check uses which key
 
-| Проверка | Что делает | Вызовов на прогон | Ключ по умолчанию |
+| Check | What it does | Calls per run | Default key |
 |---|---|---|---|
-| `semantic_diff` | описывает поведенческие изменения каждой функции | по одному на изменённую функцию (до 25) | `ANTHROPIC_API_KEY` |
-| `second_reviewer` | независимое ревью всего диффа | 1 | `OPENAI_API_KEY` |
-| `strategy_generation` | строит генераторы входных данных для функций без type hints | по одному на такую функцию | `ANTHROPIC_API_KEY` |
-| property-тесты | запускают старую и новую версию функции | 0 | не нужен |
+| `semantic_diff` | describes behavioral changes of each function | one per changed function (up to 25) | `ANTHROPIC_API_KEY` |
+| `second_reviewer` | independent review of the whole diff | 1 | `OPENAI_API_KEY` |
+| `strategy_generation` | builds input generators for functions without type hints | one per such function | `ANTHROPIC_API_KEY` |
+| property tests | run the old and the new version of the function | 0 | not needed |
 
-Второй ревьюер по умолчанию работает у другого провайдера, чем semantic diff:
-у моделей одного провайдера общие слепые пятна.
+By default the second reviewer uses a different provider than the semantic
+diff: models from the same provider share blind spots.
 
-### Что будет, если ключ один или ключей нет
+### What happens with one key or none
 
-Проверка без ключа пропускается, прогон не падает. Score при этом ограничен
-долей отработавших проверок ([потолок по покрытию](#свёртка-в-score)):
+A check without a key is skipped, the run doesn't fail. The score is then
+capped by the share of checks that ran ([coverage cap](#folding-into-a-score)):
 
-| Ключи | Что работает | Потолок score |
+| Keys | What runs | Score cap |
 |---|---|---|
-| оба | всё | 100 |
-| только Anthropic, конфиг по умолчанию | всё, кроме второго ревьюера | 82 |
-| только Anthropic, ревьюер переключён на `anthropic` | всё | 100 |
-| нет ни одного | только property-тесты | 70 |
-| нет ни одного, AI-проверки на локальной Ollama | всё | 100 |
+| both | everything | 100 |
+| Anthropic only, default config | everything except the second reviewer | 82 |
+| Anthropic only, reviewer switched to `anthropic` | everything | 100 |
+| none | property tests only | 70 |
+| none, AI checks on local Ollama | everything | 100 |
 
-Ревьюер переключается на Anthropic в `confidence.yml`. Готовый вариант есть
-в шаблоне `confidence-score init`, закомментированный:
+The reviewer is switched to Anthropic in `confidence.yml`. A ready-made,
+commented-out variant is in the `confidence-score init` template:
 
 ```yaml
 providers:
@@ -260,76 +276,76 @@ providers:
     model: claude-opus-5
 ```
 
-### Как получить ключ
+### Getting a key
 
-Подписка Claude Pro/Max или ChatGPT Plus доступа к API не даёт: это отдельные
-продукты с отдельной оплатой. Без пополненного API-баланса ключ создастся, но
-все запросы с ним будут отклонены.
+A Claude Pro/Max or ChatGPT Plus subscription does not give API access: those
+are separate products with separate billing. Without a funded API balance the
+key will be created, but every request made with it will be rejected.
 
 - Anthropic: [console.anthropic.com](https://console.anthropic.com) →
-  Billing (пополнить баланс) → API Keys → Create Key.
+  Billing (add funds) → API Keys → Create Key.
 - OpenAI: [platform.openai.com](https://platform.openai.com) →
   Billing → API keys → Create new secret key.
 
-Ключ показывается один раз, скопируйте его сразу. Для тестового ключа
-поставьте лимит трат в консоли провайдера.
+The key is shown only once, copy it right away. For a test key, set a spending
+limit in the provider's console.
 
-Ключи не пишутся в `confidence.yml`. Их место в переменных окружения
-(локально) или в GitHub Secrets (для Action).
+Keys are never written to `confidence.yml`. They belong in environment
+variables (locally) or GitHub Secrets (for the Action).
 
-### Модели и стоимость
+### Models and cost
 
-По умолчанию все задачи Anthropic выполняет `claude-opus-5`. Модель и глубину
-размышлений можно задать для каждой проверки отдельно:
+By default every Anthropic task runs on `claude-opus-5`. The model and the
+thinking depth can be set per check:
 
-| Модель | Вход / выход, $ за 1M токенов | Когда брать |
+| Model | Input / output, $ per 1M tokens | When to use |
 |---|---|---|
-| `claude-opus-5` | 5 / 25 | по умолчанию; лучшая точность ревью |
-| `claude-sonnet-5` | 2 / 10 | дешевле; разумно для `semantic_diff` и `strategy_generation` |
-| `claude-haiku-4-5` | 1 / 5 | самая дешёвая, для узких задач |
+| `claude-opus-5` | 5 / 25 | default; best review accuracy |
+| `claude-sonnet-5` | 2 / 10 | cheaper; reasonable for `semantic_diff` and `strategy_generation` |
+| `claude-haiku-4-5` | 1 / 5 | cheapest, for narrow tasks |
 
 ```yaml
 providers:
   semantic_diff:
     provider: anthropic
     model: claude-opus-5
-    effort: medium        # low | medium | high | xhigh | max; по умолчанию high
+    effort: medium        # low | medium | high | xhigh | max; default is high
 ```
 
-`effort` задаёт глубину размышлений. `low` и `medium` быстрее и дешевле, и для
-узкой задачи вроде semantic diff их часто хватает, но проверьте это на своих
-PR. Параметр действует только для Anthropic.
+`effort` sets the thinking depth. `low` and `medium` are faster and cheaper,
+and for a narrow task like the semantic diff they are often enough, but check
+that on your own PRs. The parameter only applies to Anthropic.
 
-Небольшой PR стоит центы, крупный (25 изменённых функций) обходится примерно
-в доллар. Повторный прогон того же PR почти бесплатный благодаря
-[кэшу](#конфигурация-confidenceyml): оплачиваются только изменившиеся функции.
+A small PR costs cents, a large one (25 changed functions) comes to about a
+dollar. Re-running the same PR is almost free thanks to the
+[cache](#configuration-confidenceyml): only the changed functions are billed.
 
-### Бесплатные и дешёвые модели
+### Free and cheap models
 
-Любую из трёх AI-проверок можно отдать другому провайдеру, поменяв `provider`
-и `model` в `confidence.yml`:
+Any of the three AI checks can be handed to another provider by changing
+`provider` and `model` in `confidence.yml`:
 
-| `provider` | Стоимость | Ключ | Куда уходит код |
+| `provider` | Cost | Key | Where your code goes |
 |---|---|---|---|
-| `ollama` | бесплатно | не нужен | никуда, модель работает на вашем компьютере |
-| `deepseek` | платно, но в десятки раз дешевле Opus | `DEEPSEEK_API_KEY` | DeepSeek |
-| `qwen` | обычно есть стартовая бесплатная квота, проверьте в консоли | `DASHSCOPE_API_KEY` | Alibaba Cloud |
-| `openrouter` + модель с `:free` | бесплатно, 50 запросов в день (1000 после покупки кредитов от $10) | `OPENROUTER_API_KEY` | OpenRouter и провайдер модели |
-| `openai_compatible` | зависит от сервера | `api_key_env` в конфиге, если нужен | ваш сервер (`base_url`) |
+| `ollama` | free | not needed | nowhere, the model runs on your computer |
+| `deepseek` | paid, but dozens of times cheaper than Opus | `DEEPSEEK_API_KEY` | DeepSeek |
+| `qwen` | usually has a free starter quota, check the console | `DASHSCOPE_API_KEY` | Alibaba Cloud |
+| `openrouter` + a `:free` model | free, 50 requests a day (1000 after buying $10+ in credits) | `OPENROUTER_API_KEY` | OpenRouter and the model's provider |
+| `openai_compatible` | depends on the server | `api_key_env` in the config, if needed | your server (`base_url`) |
 
-Условия бесплатных тарифов меняются, проверяйте их на сайте провайдера перед
-выбором. Бесплатные облачные тарифы могут сохранять запросы, а в запросах ваш
-код. Если это недопустимо, используйте Ollama.
+Free tier terms change, check them on the provider's site before choosing.
+Free cloud tiers may store requests, and your requests contain your code. If
+that is not acceptable, use Ollama.
 
-Бесплатные чат-версии claude.ai и ChatGPT API не дают, а подключение к ним
-через эмуляцию браузера нарушает их условия использования и грозит блокировкой
-аккаунта. GitHub Models, где раньше был бесплатный доступ к моделям OpenAI,
-закрыт с 30 июля 2026 года.
+The free chat versions of claude.ai and ChatGPT don't provide an API, and
+connecting to them through browser emulation violates their terms of use and
+risks getting the account banned. GitHub Models, which used to give free
+access to OpenAI models, was shut down on July 30, 2026.
 
-#### Ollama: бесплатно и локально
+#### Ollama: free and local
 
 ```bash
-ollama pull qwen2.5-coder:7b     # ~4,7 ГБ; хватает видеокарты на 8 ГБ
+ollama pull qwen2.5-coder:7b     # ~4.7 GB; an 8 GB GPU is enough
 ```
 
 ```yaml
@@ -338,38 +354,39 @@ providers:
   semantic_diff:       { provider: ollama, model: qwen2.5-coder:7b }
   second_reviewer:     { provider: ollama, model: qwen2.5-coder:7b }
 limits:
-  max_parallel_ai_calls: 1   # одна видеокарта, запросы всё равно идут по очереди
+  max_parallel_ai_calls: 1   # one GPU, requests are queued anyway
 ```
 
-`confidence-score doctor` проверит, что Ollama запущена и модель скачана.
+`confidence-score doctor` checks that Ollama is running and the model is
+downloaded.
 
-Что стоит знать:
+Worth knowing:
 
-- Окно контекста задаётся автоматически. По умолчанию у Ollama оно 4 096
-  токенов, и более длинный промпт сервер молча обрезает с начала, то есть
-  ровно там, где лежит дифф. Модель после этого уверенно оценивает код,
-  которого не видела. Поэтому провайдер обращается к родному API Ollama и
-  запрашивает окно 32 768 токенов (`context_window` в конфиге). Если дифф не
-  помещается и в него, ответ отклоняется с причиной в отчёте.
-- Оценки воспроизводимы: запросы идут с `temperature: 0` и фиксированным
-  `seed`, и один и тот же PR получает одну и ту же оценку.
-- Первый запрос медленный, около 45 секунд на видеокарте с 8 ГБ: модель
-  загружается в видеопамять. Дальше демо-PR проверяется за 4-7 секунд, а
-  повторный прогон того же PR берётся из кэша за секунду.
-- Модель на 7B заметно слабее Opus. На демо-баге она замечает удалённую
-  проверку, но ставит ей `medium`, а на безопасном рефакторинге иногда
-  выдумывает несуществующее изменение. Это бесплатное дополнение к
-  property-тестам, сильного ревьюера она не заменит.
-- Если `ollama pull` падает с `server gave HTTP response to HTTPS client`,
-  сервер Ollama ходит в интернет мимо вашего VPN или прокси, а на прямом
-  маршруте CDN с файлами моделей заблокирован. Задайте `HTTPS_PROXY` для
-  самого приложения Ollama (или включите в VPN-клиенте режим, который
-  перехватывает трафик всех программ) и повторите `ollama pull`.
+- The context window is set automatically. By default Ollama uses 4,096
+  tokens and silently truncates a longer prompt from the start, which is
+  exactly where the diff is. The model then confidently rates code it has
+  never seen. So the provider talks to Ollama's native API and requests a
+  32,768-token window (`context_window` in the config). If the diff doesn't
+  fit even into that, the answer is rejected with a reason in the report.
+- Scores are reproducible: requests use `temperature: 0` and a fixed `seed`,
+  so the same PR gets the same score.
+- The first request is slow, about 45 seconds on an 8 GB GPU, while the model
+  is loaded into video memory. After that the demo PR is checked in 4-7
+  seconds, and a re-run of the same PR comes from the cache in a second.
+- A 7B model is noticeably weaker than Opus. On the demo bug it notices the
+  removed check but rates it `medium`, and on the safe refactoring it
+  sometimes invents a change that isn't there. It is a free addition to the
+  property tests, not a replacement for a strong reviewer.
+- If `ollama pull` fails with `server gave HTTP response to HTTPS client`, the
+  Ollama server reaches the internet around your VPN or proxy, and the CDN
+  with model files is blocked on the direct route. Set `HTTPS_PROXY` for the
+  Ollama app itself (or turn on the VPN client mode that captures traffic from
+  all programs) and run `ollama pull` again.
 
-### Панель ревьюеров
+### Reviewer panel
 
-Вторым ревьюером может быть панель из нескольких моделей, например сильная
-облачная и бесплатная локальная:
+The second reviewer can be a panel of several models, for example a strong
+cloud one and a free local one:
 
 ```yaml
 providers:
@@ -378,37 +395,39 @@ providers:
     - { provider: ollama,    model: qwen2.5-coder:7b, weight: 1 }
 ```
 
-- Оценка панели считается как взвешенное среднее оценок ответивших
-  участников. Оценку каждого сначала ограничивают его же находки (`high` не
-  выше 40, `medium` не выше 75), потом она идёт в среднее. Шумный участник
-  сдвигает итог, но не определяет его.
-- Если кто-то не ответил (нет ключа, упёрся в лимит, Ollama не запущена),
-  оценка считается по ответившим, а потолок score снижается пропорционально
-  весу молчавших. В отчёте видно, кто выпал и почему.
-- Сильное расхождение, от 40 пунктов между оценками, попадает в примечания.
-  На score оно не влияет, но замечания в таком случае стоит прочитать самому.
-- Замечания всех участников выводятся вместе, у каждого указано, кто его
-  нашёл. Похожие замечания разных моделей не склеиваются, потому что сравнение
-  свободного текста ненадёжно.
-- `weight` по умолчанию 1. `label` задаёт имя в отчёте, по умолчанию это
-  `provider/model`. Одна и та же модель дважды считается ошибкой конфига.
+- The panel score is the weighted average of the members that answered. Each
+  member's score is first capped by its own findings (no more than 40 for
+  `high`, no more than 75 for `medium`) and only then goes into the average.
+  A noisy member shifts the result but doesn't decide it.
+- If someone didn't answer (no key, hit a rate limit, Ollama not running), the
+  score is computed from those who answered, and the score cap drops in
+  proportion to the weight of the silent members. The report shows who dropped
+  out and why.
+- A large disagreement, 40 points or more between scores, goes into the notes.
+  It doesn't affect the score, but in that case the findings are worth reading
+  yourself.
+- Findings from all members are listed together, each marked with who found
+  it. Similar findings from different models are not merged, because comparing
+  free text is unreliable.
+- `weight` defaults to 1. `label` sets the name in the report, by default
+  `provider/model`. The same model listed twice is a config error.
 
-Каждый участник делает отдельный вызов модели, так что панель из трёх стоит
-как три ревьюера. Для semantic diff панели нет: там вызовов и так столько же,
-сколько функций.
+Each member makes a separate model call, so a panel of three costs as much as
+three reviewers. The semantic diff has no panel: it already makes as many calls
+as there are functions.
 
-### Поведение моделей, о котором стоит знать
+### Model behavior worth knowing about
 
-- Модель может отклонить запрос по решению классификатора безопасности.
-  Изредка это случается с диффами про криптографию или разбор сетевых пакетов.
-  Провайдер включает серверные fallbacks, и API перезапускает отклонённый
-  запрос на рекомендованной резервной модели. Если отказала вся цепочка,
-  проверка этой функции пропускается и не засчитывается ни как «опасно», ни
-  как «безопасно».
-- Лимит ответа рассчитан с запасом на размышления. У Claude Opus 5 thinking
-  включён по умолчанию и делит `max_tokens` с ответом, поэтому лимит равен
-  16 000 токенов, хотя сам JSON намного меньше. Оплачиваются только реально
-  сгенерированные токены.
+- A model may refuse a request based on a safety classifier decision. This
+  occasionally happens with diffs about cryptography or network packet
+  parsing. The provider enables server-side fallbacks, and the API retries the
+  refused request on the recommended fallback model. If the whole chain
+  refuses, the check for that function is skipped and counts neither as
+  "unsafe" nor as "safe".
+- The response limit leaves room for thinking. Claude Opus 5 has thinking on
+  by default, and it shares `max_tokens` with the answer, so the limit is
+  16,000 tokens even though the JSON itself is much smaller. Only tokens that
+  were actually generated are billed.
 
 ## CLI
 
@@ -416,57 +435,60 @@ providers:
 confidence-score init [--path confidence.yml] [--force]
 
 confidence-score doctor [--repo PATH] [--config PATH]
-  # какие проверки заработают с текущими ключами, SDK и Node.js, и какой будет
-  # потолок score; ничего не отправляет в API
+  # which checks will run with the current keys, SDKs and Node.js, and what the
+  # score cap will be; sends nothing to any API
 
 confidence-score run
-  --base REF            # базовый ref (по умолчанию merge-base с origin/main)
-  --head REF|WORKTREE   # целевой ref (по умолчанию рабочее дерево)
-  --repo PATH            # путь к репозиторию (по умолчанию .)
-  --config PATH          # путь к confidence.yml (по умолчанию ищется в репозитории)
+  --base REF            # base ref (default: merge-base with origin/main)
+  --head REF|WORKTREE   # target ref (default: working tree)
+  --repo PATH            # repository path (default: .)
+  --config PATH          # path to confidence.yml (default: looked up in the repo)
   --format terminal|json|markdown
-  --json-out PATH        # дополнительно сохранить JSON-отчёт
-  --markdown-out PATH    # дополнительно сохранить Markdown для комментария в PR
-  --fail-under N         # переопределить thresholds.fail_below
-  --no-gate              # всегда exit code 0 (только информативно)
-  --debug                # полная трассировка при ошибке
+  --json-out PATH        # also save the JSON report
+  --markdown-out PATH    # also save Markdown for a PR comment
+  --fail-under N         # override thresholds.fail_below
+  --no-gate              # always exit code 0 (informational only)
+  --debug                # full traceback on error
 ```
 
-Exit code равен `1`, если сработал `hard_fail` или `overall` ниже
-`thresholds.fail_below` (либо `--fail-under`), иначе `0`. На этом построен
-merge gate: GitHub Action ниже превращает его в обязательную проверку.
+The exit code is `1` if `hard_fail` triggered or `overall` is below
+`thresholds.fail_below` (or `--fail-under`), otherwise `0`. The merge gate is
+built on this: the GitHub Action below turns it into a required check.
 
-## Конфигурация (`confidence.yml`)
+## Configuration (`confidence.yml`)
 
-Полная схема с дефолтами и комментариями лежит в
+The full schema with defaults and comments is in
 [`confidence_scorer/config.py`](confidence_scorer/config.py) (`DEFAULT_CONFIG_TEMPLATE`),
-тот же файл создаёт `confidence-score init`. Основные секции:
+the same file that `confidence-score init` creates. Main sections:
 
-| Секция | Что делает |
+| Section | What it does |
 |---|---|
-| `languages` | какие языки диффа анализировать (`python`, `javascript`) |
-| `exclude` | globs, которые никогда не анализируются (тесты, vendor, dist...) |
-| `weights` | веса трёх проверок в итоговом score (нормализуются автоматически) |
-| `thresholds` | границы `pass_at` / `warn_below` / `fail_below` |
-| `hard_fail` | включён ли hard-fail и до какого score он ограничивает итог |
-| `hypothesis` | `max_examples`, таймауты на функцию и на файл, `seed` для Python property-тестов |
-| `js` | то же самое для JS/TS (`fast_check_examples`, таймауты, `seed`, путь к `node`) |
-| `providers` | провайдер, модель и `effort` для каждой из трёх AI-задач, у второго ревьюера можно задать панель (см. [«AI-ключи и модели»](#ai-ключи-и-модели)) |
-| `limits` | сколько функций максимум анализировать за прогон, размер diff, отправляемого в AI |
-| `evidence` | потолок score при неполном покрытии проверками (`min_cap`) |
-| `cache` | дисковый кэш ответов AI: повторный прогон того же PR не оплачивается заново |
-| `execute_changed_code` | `false` полностью выключает выполнение диффа (см. [«Безопасность»](#безопасность)) |
+| `languages` | which diff languages to analyze (`python`, `javascript`) |
+| `exclude` | globs that are never analyzed (tests, vendor, dist...) |
+| `weights` | weights of the three checks in the final score (normalized automatically) |
+| `thresholds` | the `pass_at` / `warn_below` / `fail_below` boundaries |
+| `hard_fail` | whether hard-fail is on and what score it caps the result at |
+| `hypothesis` | `max_examples`, per-function and per-file timeouts, `seed` for Python property tests |
+| `js` | the same for JS/TS (`fast_check_examples`, timeouts, `seed`, path to `node`) |
+| `providers` | provider, model and `effort` for each of the three AI tasks; the second reviewer can be a panel (see [AI keys and models](#ai-keys-and-models)) |
+| `limits` | maximum number of functions per run, size of the diff sent to AI |
+| `evidence` | score cap when check coverage is incomplete (`min_cap`) |
+| `cache` | disk cache of AI responses: re-running the same PR isn't billed again |
+| `execute_changed_code` | `false` turns off executing the diff entirely (see [Security](#security)) |
 
-В конфиге хранятся только имена переменных окружения с ключами, сами ключи
-туда не пишутся.
+The config only stores the names of the environment variables that hold the
+keys, never the keys themselves.
 
 ## GitHub Action
 
-Нужны два workflow: первый считает score, второй публикует отчёт комментарием
-в PR. В PR из форка GitHub не даёт ни секретов, ни прав на запись, поэтому
-первый workflow не может написать комментарий сам. Второй запускается уже в
-контексте вашего репозитория, код PR не скачивает и только публикует готовый
-отчёт.
+Available on the
+[GitHub Marketplace](https://github.com/marketplace/actions/confidence-scorer).
+
+It takes two workflows: the first computes the score, the second posts the
+report as a PR comment. For a PR from a fork GitHub gives neither secrets nor
+write permissions, so the first workflow can't post the comment itself. The
+second one runs in the context of your repository, doesn't download the PR
+code and only publishes the finished report.
 
 ```yaml
 # .github/workflows/confidence-score.yml
@@ -482,7 +504,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0   # обязательно: без полной истории не сравнить base...head
+          fetch-depth: 0   # required: base...head can't be compared without full history
 
       - uses: Kakadu525/confidence-scorer@v1
         with:
@@ -490,7 +512,7 @@ jobs:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
 
-      - name: Сохранить номер PR
+      - name: Save PR number
         if: always()
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -506,152 +528,160 @@ jobs:
           if-no-files-found: ignore
 ```
 
-Второй workflow скопируйте без изменений из этого репозитория:
+Copy the second workflow from this repository as is:
 [`.github/workflows/confidence-comment.yml`](.github/workflows/confidence-comment.yml).
 
-Не заменяйте `pull_request` на `pull_request_target`, даже если комментарии
-«не работают»: так код из форка выполнится с доступом к вашим секретам.
+Don't replace `pull_request` with `pull_request_target`, even if comments
+"don't work": that way code from a fork runs with access to your secrets.
 
-Если PR приходят только из веток этого же репозитория, хватит одного
-workflow: уберите `post-comment: "false"` и шаги с артефактом, а в
-`permissions` добавьте `pull-requests: write`.
+If PRs only come from branches of the same repository, one workflow is
+enough: remove `post-comment: "false"` and the artifact steps, and add
+`pull-requests: write` to `permissions`.
 
-Ключи провайдеров передаются входами `anthropic-api-key`, `openai-api-key`,
-`openrouter-api-key`, `deepseek-api-key`, `dashscope-api-key`. Action
-выставляет outputs `score` и `verdict` и падает, если сработал merge gate,
-поэтому его можно сделать обязательной проверкой (required status check).
-Ещё есть output `gate` (`passed` или `failed`). Outputs доступны и после
-падения Action, в шагах с `if: always()`. Если блокировать мерж не нужно,
-поставьте `fail-on-gate: "false"`: Action только сообщит результат.
+Provider keys are passed through the inputs `anthropic-api-key`,
+`openai-api-key`, `openrouter-api-key`, `deepseek-api-key`,
+`dashscope-api-key`. The Action sets the outputs `score` and `verdict` and
+fails when the merge gate triggers, so it can be made a required status check.
+There is also a `gate` output (`passed` or `failed`). Outputs are available
+even after the Action fails, in steps with `if: always()`. If you don't want to
+block merges, set `fail-on-gate: "false"`: the Action will only report the
+result.
 
-### Бесплатно в CI
+### Free in CI
 
-Ollama на обычных раннерах GitHub не подходит: видеокарты там нет, а модель
-пришлось бы скачивать при каждом запуске. Для CI бесплатно работают модели
-OpenRouter с суффиксом `:free`:
+Ollama doesn't fit regular GitHub runners: there is no GPU, and the model would
+have to be downloaded on every run. For CI, OpenRouter models with the `:free`
+suffix work for free:
 
 ```yaml
 providers:
-  strategy_generation: { provider: openrouter, model: <id модели>:free }
-  semantic_diff:       { provider: openrouter, model: <id модели>:free }
-  second_reviewer:     { provider: openrouter, model: <id другой модели>:free }
+  strategy_generation: { provider: openrouter, model: <model id>:free }
+  semantic_diff:       { provider: openrouter, model: <model id>:free }
+  second_reviewer:     { provider: openrouter, model: <another model id>:free }
 limits:
   max_parallel_ai_calls: 1
 ```
 
-Без купленных кредитов OpenRouter даёт 50 бесплатных запросов в день, а
-semantic diff тратит по запросу на каждую изменённую функцию. Для активного
-репозитория этого мало: либо купите кредиты (лимит вырастет до 1000 в день),
-либо оставьте на OpenRouter только второго ревьюера.
+Without purchased credits OpenRouter gives 50 free requests a day, and the
+semantic diff spends one request per changed function. For an active
+repository that isn't enough: either buy credits (the limit goes up to 1000 a
+day) or keep only the second reviewer on OpenRouter.
 
-В PR из форков секреты недоступны, поэтому AI-проверки там пропускаются, а
-score получает потолок по покрытию.
+Secrets aren't available in PRs from forks, so the AI checks are skipped there
+and the score gets a coverage cap.
 
-## Безопасность
+## Security
 
-Differential testing импортирует и исполняет обе версии кода из PR. Если
-в диффе есть вредоносный код, он будет выполнен. Полноценной песочницы
-(контейнер без сети и доступа к файлам) нет. Поэтому:
+Differential testing imports and executes both versions of the code from the
+PR. If the diff contains malicious code, it will run. There is no full sandbox
+(a container without network and file access). So:
 
-- запускайте проверку в CI на одноразовом раннере, а не на своей машине;
-- используйте `pull_request`, а не `pull_request_target`;
-- не передавайте раннеру секреты, которые проверке не нужны;
-- в недоверенном окружении поставьте `execute_changed_code: false`: тогда код
-  из PR не исполняется, остаются semantic diff и второй ревьюер.
+- run the check in CI on a disposable runner, not on your own machine;
+- use `pull_request`, not `pull_request_target`;
+- don't give the runner secrets the check doesn't need;
+- in an untrusted environment set `execute_changed_code: false`: then the PR
+  code is never executed, and the semantic diff and second reviewer remain.
 
-Каждый файл тестируется в отдельном процессе с таймаутом на функцию и на файл.
-Генераторы входных данных, которые предлагает модель, не исполняются как код:
-они проходят через фиксированный список допустимых конструкций.
+Each file is tested in a separate process with per-function and per-file
+timeouts. Input generators proposed by the model are never executed as code:
+they go through a fixed list of allowed constructs.
 
-Дифф и код изменённых функций отправляются выбранным AI-провайдерам.
-Бесплатные облачные тарифы могут сохранять запросы; если это недопустимо,
-используйте Ollama.
+The diff and the code of the changed functions are sent to the selected AI
+providers. Free cloud tiers may store requests; if that is not acceptable, use
+Ollama.
 
-## Ограничения
+## Limitations
 
-- Методы классов в differential testing не участвуют, только функции верхнего
-  уровня. Для вызова метода нужен экземпляр класса, а собрать его
-  автоматически, когда у конструктора произвольные зависимости, намного
-  сложнее. Методы всё равно проверяют semantic diff и второй ревьюер.
-- Вложенные функции и замыкания отдельно не извлекаются: их поведение
-  неотделимо от внешней функции.
-- `*args`, `**kwargs` и rest-параметры генератор входных данных не
-  поддерживает. Такие функции получают статус `skipped`, а не пропускаются
-  молча.
-- Дифф-тестирование может найти расхождение на вырожденных входах, которые
-  нарушают неявные предусловия. Например, `lo > hi` для функции, которая
-  рассчитывает на `lo <= hi`. Багом в бытовом смысле это бывает не всегда, но
-  поведение действительно разошлось, а насколько это важно, решает человек.
-- JS/TS-воркер ограничивает время на функцию между прогонами property
-  (`js.per_function_timeout_s`), но бесконечный цикл внутри одного вызова
-  прервать не может: в Node синхронный код нельзя остановить из того же
-  потока. Такой случай снимает таймаут на файл со стороны Python.
-- Недетерминированные функции пропускаются. Если функция на одном и том же
-  входе даёт разные результаты (`random`, `time`, сеть), расхождение не связано
-  с диффом. Такая функция получает статус `skipped` с объяснением.
-- Редкие «магические» значения не находятся. Регрессию вида
-  `if n == 987654: return 0` случайный поиск не поймает: граничные значения
-  перебираются детерминированно, но конкретные большие константы в этот
-  перебор не входят. Так устроен любой property-based подход, и такие случаи
-  остаются на semantic diff и второго ревьюера.
-- Semantic diff и второй ревьюер зависят от качества модели. Это
-  вероятностные оценки, формальной верификацией они не являются.
+- Class methods don't take part in differential testing, only top-level
+  functions. Calling a method needs an instance of the class, and building one
+  automatically when the constructor has arbitrary dependencies is much
+  harder. Methods are still checked by the semantic diff and the second
+  reviewer.
+- Nested functions and closures aren't extracted separately: their behavior
+  can't be separated from the outer function.
+- `*args`, `**kwargs` and rest parameters aren't supported by the input
+  generator. Such functions get the `skipped` status instead of being dropped
+  silently.
+- Differential testing may find a divergence on degenerate inputs that break
+  implicit preconditions. For example, `lo > hi` for a function that expects
+  `lo <= hi`. That isn't always a bug in the everyday sense, but the behavior
+  really did diverge, and a human decides how much it matters.
+- The JS/TS worker limits time per function between property runs
+  (`js.per_function_timeout_s`), but can't interrupt an infinite loop inside a
+  single call: in Node, synchronous code can't be stopped from the same thread.
+  The per-file timeout on the Python side handles that case.
+- Non-deterministic functions are skipped. If a function gives different
+  results for the same input (`random`, `time`, network), the divergence has
+  nothing to do with the diff. Such a function gets the `skipped` status with
+  an explanation.
+- Rare "magic" values aren't found. A regression like
+  `if n == 987654: return 0` won't be caught by random search: edge values are
+  enumerated deterministically, but specific large constants aren't part of
+  that enumeration. Every property-based approach works this way, and such
+  cases are left to the semantic diff and the second reviewer.
+- The semantic diff and the second reviewer depend on the quality of the model.
+  They are probabilistic estimates, not formal verification.
 
-## Разработка
+## Development
 
 ```bash
 pip install -e ".[dev]"
-cd confidence_scorer/js_helpers && npm install && cd -   # для JS/TS-тестов
+cd confidence_scorer/js_helpers && npm install && cd -   # for JS/TS tests
 
-pytest -q                                   # тесты
-pytest -q --cov=confidence_scorer           # с покрытием
-ruff check confidence_scorer tests          # линтер
+pytest -q                                   # tests
+pytest -q --cov=confidence_scorer           # with coverage
+ruff check confidence_scorer tests          # linter
 
-# живой тест на локальной Ollama (по умолчанию пропускается)
+# live test on a local Ollama (skipped by default)
 CONFIDENCE_OLLAMA_MODEL=qwen2.5-coder:7b pytest -q -k live
 ```
 
-Тесты JS/TS-пути пропускаются, если Node или зависимости `js_helpers` не
-установлены. CI (`.github/workflows/tests.yml`) гоняет матрицу Linux/Windows ×
-Python 3.10/3.12. Windows в матрице нужен потому, что таймаут на функцию там
-устроен иначе (без SIGALRM), и регрессию в этом месте видно только на нём.
+JS/TS path tests are skipped if Node or the `js_helpers` dependencies aren't
+installed. CI (`.github/workflows/tests.yml`) runs a Linux/Windows ×
+Python 3.10/3.12 matrix. Windows is in the matrix because the per-function
+timeout works differently there (no SIGALRM), and a regression in that spot
+only shows up on it.
 
-Структура проекта:
+Project layout:
 
 ```
 confidence_scorer/
   cli.py                     # click CLI: init / doctor / run
-  doctor.py                  # готовность проверок: ключи, SDK, Node, потолок score
-  pipeline.py                # склеивает всё в один прогон
-  config.py                  # pydantic-схема confidence.yml + шаблон init
-  presets.py                 # адреса и ключи провайдеров: ollama, deepseek, qwen, openrouter
-  git_diff.py                # git diff -> список изменённых файлов
-  scoring.py                 # свёртка 3 sub-score в overall + вердикт
+  doctor.py                  # check readiness: keys, SDKs, Node, score cap
+  pipeline.py                # glues everything into one run
+  config.py                  # pydantic schema for confidence.yml + init template
+  presets.py                 # provider URLs and keys: ollama, deepseek, qwen, openrouter
+  git_diff.py                # git diff -> list of changed files
+  scoring.py                 # folds 3 sub-scores into overall + verdict
   extractors/
-    python_extractor.py      # AST-diff изменённых функций (Python)
-    js_extractor.py          # Babel-diff изменённых функций (JS/TS)
+    python_extractor.py      # AST diff of changed functions (Python)
+    js_extractor.py          # Babel diff of changed functions (JS/TS)
   checks/
-    property_tests.py        # оркестрация differential testing (Python)
-    js_property_tests.py     # то же для JS/TS
-    strategy_builder.py      # type hint -> Hypothesis strategy, AI-spec allowlist
-    js_strategy.py           # TS type -> spec (Python-порт для оркестратора)
-    semantic_diff.py         # AI: поведенческие изменения функции
-    second_reviewer.py       # AI: независимое ревью всего диффа
-    review_panel.py          # панель ревьюеров: параллельный запуск и сведение оценок
-    _diff_worker.py          # subprocess-воркер: реальный запуск Python-функций
-    severity.py              # оценка AI не выше, чем допускают его же находки
+    property_tests.py        # differential testing orchestration (Python)
+    js_property_tests.py     # the same for JS/TS
+    strategy_builder.py      # type hint -> Hypothesis strategy, AI spec allowlist
+    js_strategy.py           # TS type -> spec (Python port for the orchestrator)
+    semantic_diff.py         # AI: behavioral changes of a function
+    second_reviewer.py       # AI: independent review of the whole diff
+    review_panel.py          # reviewer panel: parallel runs and score aggregation
+    _diff_worker.py          # subprocess worker: actually runs Python functions
+    severity.py              # an AI's score can't exceed what its own findings allow
   ai/
-    anthropic_provider.py    # Claude: fallbacks при отказах, кэшируемый system
-    openai_provider.py       # OpenAI и любые OpenAI-совместимые API (DeepSeek, Qwen, OpenRouter)
-    ollama_provider.py       # локальная Ollama через родной API (окно контекста в запросе)
-    cache.py                 # дисковый кэш ответов (ключ = провайдер+модель+effort+промпт)
-    prompts.py               # промпты трёх AI-задач
+    anthropic_provider.py    # Claude: fallbacks on refusals, cached system prompt
+    openai_provider.py       # OpenAI and any OpenAI-compatible API (DeepSeek, Qwen, OpenRouter)
+    ollama_provider.py       # local Ollama through the native API (context window in the request)
+    cache.py                 # disk cache of responses (key = provider+model+effort+prompt)
+    prompts.py               # prompts for the three AI tasks
   js_helpers/                # Node: extract.js, diff_worker.js, spec_to_arbitrary.js
-  report/                    # terminal (rich) / markdown (PR-комментарий) / json
+  report/                    # terminal (rich) / markdown (PR comment) / json
 action.yml                   # GitHub Action
 .github/
-  workflows/confidence-score.yml   # score для PR
-  workflows/confidence-comment.yml # комментарий с отчётом, в том числе для PR из форков
-  workflows/tests.yml        # тесты проекта: Linux/Windows × Python 3.10/3.12 + ruff
-example_demo/                 # воспроизводимая демонстрация (баг + safe-рефакторинг)
+  workflows/confidence-score.yml   # score for a PR
+  workflows/confidence-comment.yml # comment with the report, including PRs from forks
+  workflows/tests.yml        # project tests: Linux/Windows × Python 3.10/3.12 + ruff
+example_demo/                 # reproducible demo (bug + safe refactoring)
 ```
+
+## License
+
+[MIT](LICENSE)
