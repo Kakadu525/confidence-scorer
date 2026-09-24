@@ -1,7 +1,7 @@
 name: "Confidence Scorer"
 description: >-
-  Оценка уверенности для AI-сгенерированных PR: differential property-based
-  тесты, semantic diff и независимый AI-ревьюер перед мержем.
+  Оценка уверенности для AI-сгенерированных PR: property-based тесты,
+  semantic diff и независимый AI-ревьюер перед мержем
 branding:
   icon: "shield"
   color: "purple"
