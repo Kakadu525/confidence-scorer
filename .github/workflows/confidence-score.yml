@@ -13,18 +13,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # обязательно: без полной истории не сравнить base...head
+          fetch-depth: 0 # required: base...head can't be compared without full history
 
       - name: Confidence Scorer
         uses: ./
         with:
           post-comment: "false"
-          # Ключи задаются в Settings -> Secrets and variables -> Actions.
+          # Keys are set in Settings -> Secrets and variables -> Actions.
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
 
-      - name: Сохранить номер PR
+      - name: Save PR number
         if: always()
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}

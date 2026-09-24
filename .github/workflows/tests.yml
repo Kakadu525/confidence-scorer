@@ -34,17 +34,17 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Установить пакет и dev-зависимости
+      - name: Install the package and dev dependencies
         run: pip install -e ".[dev]"
 
-      - name: Установить JS-хелперы
+      - name: Install JS helpers
         run: npm install --omit=dev --no-audit --no-fund
         working-directory: confidence_scorer/js_helpers
 
-      - name: Тесты
+      - name: Tests
         run: pytest -q --cov=confidence_scorer --cov-report=term-missing --cov-report=xml
 
-      - name: Проверить, что js_helpers попадают в сборку
+      - name: Check that js_helpers are packaged
         shell: bash
         run: |
           set -euo pipefail
@@ -60,8 +60,8 @@ jobs:
               if f"confidence_scorer/js_helpers/{f}" not in names
           ]
           if missing:
-              sys.exit(f"В wheel отсутствуют файлы js_helpers: {missing}")
-          print("js_helpers упакованы полностью")
+              sys.exit(f"js_helpers files missing from the wheel: {missing}")
+          print("js_helpers are fully packaged")
           PY
 
   lint:

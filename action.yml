@@ -22,6 +22,9 @@ inputs:
   fail-under:
     description: "Override thresholds.fail_below from the config"
     default: ""
+  language:
+    description: "Report and PR comment language: en | ru (default: `language:` from confidence.yml, otherwise en)"
+    default: ""
   fail-on-gate:
     description: "Fail when the merge gate triggers. With \"false\" the Action only reports the result in the score, verdict and gate outputs"
     default: "true"
@@ -61,11 +64,11 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Проверить полноту истории git
+    - name: Check that git history is complete
       shell: bash
       run: |
         if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-          echo "::error::Репозиторий выгружен мелко (shallow). Добавьте 'fetch-depth: 0' в actions/checkout: confidence-scorer нужна полная история для сравнения base/head."
+          echo "::error::The repository is a shallow clone. Add 'fetch-depth: 0' to actions/checkout: confidence-scorer needs the full history to compare base/head."
           exit 1
         fi
 
@@ -78,7 +81,7 @@ runs:
         node-version: ${{ inputs.node-version }}
         package-manager-cache: false
 
-    - name: Установить confidence-scorer
+    - name: Install confidence-scorer
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
@@ -95,12 +98,12 @@ runs:
         done
 
         if [ -z "$PKG_ROOT" ]; then
-          echo "::error::Не найден pyproject.toml confidence-scorer рядом с action ($ACTION_PATH)."
+          echo "::error::confidence-scorer pyproject.toml not found next to the action ($ACTION_PATH)."
           exit 1
         fi
         pip install "$PKG_ROOT"
 
-    - name: Установить зависимости JS-хелперов (для JS/TS property-тестов)
+    - name: Install JS helper dependencies (for JS/TS property tests)
       shell: bash
       env:
         PYTHONUTF8: "1"
@@ -112,10 +115,10 @@ runs:
         if [ -f "$PKG_DIR/js_helpers/package.json" ]; then
           (cd "$PKG_DIR/js_helpers" && npm install --omit=dev --no-audit --no-fund)
         else
-          echo "::warning::js_helpers не найдены в установленном пакете, JS/TS property-тесты будут пропущены."
+          echo "::warning::js_helpers not found in the installed package, JS/TS property tests will be skipped."
         fi
 
-    - name: Определить base ref
+    - name: Determine the base ref
       id: base
       shell: bash
       env:
@@ -137,7 +140,7 @@ runs:
         fi
         printf 'ref=%s\n' "$REF" >> "$GITHUB_OUTPUT"
 
-    - name: Прогнать confidence-score
+    - name: Run confidence-score
       id: run
       shell: bash
       env:
@@ -150,12 +153,13 @@ runs:
         HEAD_SHA: ${{ github.sha }}
         CONFIG_PATH: ${{ inputs.config-path }}
         FAIL_UNDER: ${{ inputs.fail-under }}
+        CONFIDENCE_LANG: ${{ inputs.language }}
         PYTHONUTF8: "1"
         PYTHONIOENCODING: utf-8
       run: |
         set -uo pipefail
         if [ -z "$BASE_REF" ]; then
-          echo "::notice::Не с чем сравнивать: у коммита нет родителя. Проверка пропущена."
+          echo "::notice::Nothing to compare against: the commit has no parent. Check skipped."
           {
             echo "score="
             echo "verdict=unknown"
@@ -173,7 +177,7 @@ runs:
         confidence-score run "${ARGS[@]}" || RUN_EXIT=$?
 
         if [ ! -f score.json ]; then
-          echo "::error::confidence-score завершился с кодом $RUN_EXIT и не создал score.json, смотрите вывод шага выше."
+          echo "::error::confidence-score exited with code $RUN_EXIT and did not create score.json, see the step output above."
           exit "${RUN_EXIT:-1}"
         fi
 
@@ -185,7 +189,7 @@ runs:
         if [ "$RUN_EXIT" -eq 0 ]; then GATE=passed; else GATE=failed; fi
         printf 'gate=%s\n' "$GATE" >> "$GITHUB_OUTPUT"
 
-    - name: Опубликовать/обновить комментарий в PR
+    - name: Post or update the PR comment
       if: ${{ inputs.post-comment == 'true' && github.event.pull_request }}
       uses: actions/github-script@v9
       with:
@@ -193,7 +197,7 @@ runs:
         script: |
           const fs = require('fs');
           if (!fs.existsSync('report.md')) {
-            core.warning('report.md не создан, комментарий в PR не публикуется.');
+            core.warning('report.md was not created, the PR comment is not posted.');
             return;
           }
           const body = fs.readFileSync('report.md', 'utf8').slice(0, 65000);
@@ -211,15 +215,15 @@ runs:
           } catch (error) {
             if (error.status === 403 || error.status === 404) {
               core.warning(
-                'Нет прав на комментарий в PR (так бывает в PR из форков). ' +
-                'Используйте post-comment: "false" и workflow confidence-comment.yml из README confidence-scorer.'
+                'No permission to comment on the PR (this happens with PRs from forks). ' +
+                'Use post-comment: "false" and the confidence-comment.yml workflow from the confidence-scorer README.'
               );
             } else {
               throw error;
             }
           }
 
-    - name: Применить merge gate
+    - name: Apply the merge gate
       shell: bash
       env:
         RUN_EXIT_CODE: ${{ steps.run.outputs.exit_code }}
@@ -227,7 +231,7 @@ runs:
       run: |
         CODE="${RUN_EXIT_CODE:-1}"
         if [ "$CODE" != "0" ] && [ "$FAIL_ON_GATE" = "false" ]; then
-          echo "::warning::Merge gate сработал, но fail-on-gate: false, поэтому шаг не падает."
+          echo "::warning::The merge gate triggered, but fail-on-gate is false, so the step does not fail."
           exit 0
         fi
         exit "$CODE"

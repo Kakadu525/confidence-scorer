@@ -26,12 +26,12 @@ jobs:
           script: |
             const fs = require('fs');
             if (!fs.existsSync('report.md') || !fs.existsSync('pr-number.txt')) {
-              core.info('Отчёта нет, комментарий не публикуется.');
+              core.info('No report, the comment is not posted.');
               return;
             }
             const raw = fs.readFileSync('pr-number.txt', 'utf8').trim();
             if (!/^[0-9]+$/.test(raw)) {
-              core.setFailed(`Некорректный номер PR в артефакте: ${JSON.stringify(raw)}`);
+              core.setFailed(`Invalid PR number in the artifact: ${JSON.stringify(raw)}`);
               return;
             }
             const issue_number = Number(raw);
