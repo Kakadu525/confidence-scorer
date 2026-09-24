@@ -102,7 +102,7 @@ def render_terminal_report(result: PipelineResult, console: Console | None = Non
         sem_table.add_column("Severity")
         sem_table.add_column(tr("Description", "Описание"))
         for qualname, change in notable:
-            sem_table.add_row(qualname, str(change.get("severity")), str(change.get("description"))[:120])
+            sem_table.add_row(qualname, str(change.get("severity")), clip(str(change.get("description"))))
         console.print(sem_table)
 
     review = as_panel(result.review_result)
@@ -130,7 +130,7 @@ def render_terminal_report(result: PipelineResult, console: Console | None = Non
         if is_panel:
             rv_table.add_column(tr("Found by", "Кто нашёл"))
         for issue in review.issues:
-            row = [str(issue.get("severity")), str(issue.get("file", "")), str(issue.get("description"))[:120]]
+            row = [str(issue.get("severity")), str(issue.get("file", "")), clip(str(issue.get("description")))]
             if is_panel:
                 row.append(str(issue.get("reviewer", "")))
             rv_table.add_row(*row)
